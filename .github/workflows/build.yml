@@ -142,11 +142,41 @@ jobs:
           restore-keys: |
             dl-${{ env.SOURCE_REF }}-
 
-      - name: 编译
+      - name: 编译（实时显示进度）
         working-directory: openwrt
         run: |
           set -o pipefail
-          make -j"$(nproc)" V=s 2>&1 | tail -n 300
+          # 第一遍用默认摘要模式：每个包只有一两行输出，实时滚动，
+          # 一眼看出「编到哪个软件」，不会像以前 tail 缓冲那样长时间空白。
+          # 完整输出同步存 /tmp/build.log 备查。
+          make -j"$(nproc)" 2>&1 | tee /tmp/build.log
+          rc=${PIPESTATUS[0]}
+          echo "第一遍 make 退出码: $rc"
+          if [ "$rc" -eq 0 ]; then
+            exit 0
+          fi
+          # 失败自动降级：单线程 V=s 增量重跑，很快到达同一出错点并打印
+          # 真实编译错误（默认模式下底层 gcc 报错是被吞掉的）。
+          echo "::error::并行编译失败（退出码 $rc），自动降级单线程 V=s 重跑定位真实错误"
+          make -j1 V=s 2>&1 | tee /tmp/build-verbose.log
+          rc2=${PIPESTATUS[0]}
+          echo "第二遍 make 退出码: $rc2"
+          {
+            echo '==== 单线程 V=s 重跑（最后 200 行）===='
+            tail -n 200 /tmp/build-verbose.log || true
+            echo '==== 并行首跑（最后 100 行）===='
+            tail -n 100 /tmp/build.log || true
+          } > "$GITHUB_WORKSPACE/build-log-tail.txt"
+          exit "$rc2"
+
+      - name: 上传编译日志（失败时）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ env.SOURCE_REF }}-${{ github.run_number }}
+          path: build-log-tail.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: 收集产物
         run: |

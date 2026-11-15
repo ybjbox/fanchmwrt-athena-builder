@@ -223,6 +223,8 @@ scripts/SDK-script.sh
 
 | 现象 | 先查 |
 |---|---|
+| 编译日志看起来"卡住不动" | 已改为实时滚动（默认摘要模式，每个包一两行）。个别包（工具链、内核、OpenClash 这类大件）单包编译十几分钟属正常；把鼠标悬停在日志行首可以看到每行的时间戳 |
+| 编译失败想看真实报错 | 流水线会自动用单线程 `V=s` 重跑到出错点，尾部日志存进 `build-log-tail.txt` artifact；「编译」步骤里的红色 `error` 行就是根因 |
 | 编译前报「缺少必需包」 | 看日志点名的是固定底座还是**开关表派生项**：派生项多半是包名笔误或对应 feed 没拉到，被 `make defconfig` 静默丢弃；对照 `features.md` 那一行的包列表 |
 | `check-packages` 报缺 `luci-app-fwx-*` | feeds 是否 `update -a` 成功；`source_ref` 是否切到了没有 fwx 的分支 |
 | 「系统 → 定时重启」打不开 | 看 `diy.sh` 的 `gitdir` 步骤是否拿到 9 个文件、Makefile 的 `luci.mk` 引用是否改写成功；退路是手动装 ipk |
