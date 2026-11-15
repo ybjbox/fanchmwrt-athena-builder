@@ -27,7 +27,7 @@ expect_not() {
     *) printf '  PASS  %s\n' "$1"; PASS=$((PASS+1));; esac
 }
 
-echo "== C1 默认开关：核心包在、默认关闭项不在 =="
+echo "== C1 当前基线（对齐旧仓，九个可选插件全开）=="
 run "$GEN" --features "$FEATURES"
 expect_code "生成成功" 0
 expect_has "输出目标设备" "CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y"
@@ -36,16 +36,20 @@ expect_has "个人包在" "CONFIG_PACKAGE_athena-custom=y"
 expect_has "工具在" "CONFIG_PACKAGE_htop=y"
 expect_has "zram 内核选项在" "CONFIG_KERNEL_ZRAM_BACKEND_LZ4=y"
 expect_has "策略性禁用 OAF" "# CONFIG_PACKAGE_luci-app-oaf is not set"
-expect_not "默认不含 OpenClash" "CONFIG_PACKAGE_luci-app-openclash=y"
-expect_not "默认不含 bandix" "CONFIG_PACKAGE_bandix=y"
+expect_has "OpenClash 已启用" "CONFIG_PACKAGE_luci-app-openclash=y"
+expect_has "bandix 已启用" "CONFIG_PACKAGE_luci-app-bandix=y"
+expect_has "mosdns 带 geodata" "CONFIG_PACKAGE_v2ray-geodata=y"
+run "$GEN" --features "$FEATURES" --check
+expect_has "17 条全启用" "启用 17，关闭 0"
 
-echo "== C2 打开 OpenClash：包与 clone 同时生效 =="
-sed 's/^| openclash | 0 |/| openclash | 1 |/' "$FEATURES" > "$WORK/f2.md"
+echo "== C2 关掉 OpenClash：包与 clone 一起消失 =="
+sed 's/^| openclash | 1 |/| openclash | 0 |/' "$FEATURES" > "$WORK/f2.md"
 run "$GEN" --features "$WORK/f2.md"
-expect_has "包已选" "CONFIG_PACKAGE_luci-app-openclash=y"
+expect_code "仍能生成" 0
+expect_not "包已取消" "CONFIG_PACKAGE_luci-app-openclash=y"
 run "$GEN" --features "$WORK/f2.md" --list-clones
-expect_has "clone 清单含 OpenClash" "OpenClash"
-expect_has "clone 清单含 athena-led" "luci-app-athena-led"
+expect_not "clone 清单不含 OpenClash" "OpenClash"
+expect_has "其它 clone 不受影响" "luci-app-athena-led"
 
 echo "== C3 feed 清单去重 =="
 run "$GEN" --features "$FEATURES" --list-feeds
@@ -60,7 +64,7 @@ expect_code "重名被拒" 2
 expect_has "报错点名重名" "功能名重复"
 
 echo "== C5 数据错误：启用列非 0/1 =="
-sed 's/^| openclash | 0 |/| openclash | 2 |/' "$FEATURES" > "$WORK/f5.md"
+sed 's/^| lucky | 1 |/| lucky | 2 |/' "$FEATURES" > "$WORK/f5.md"
 run "$GEN" --features "$WORK/f5.md" --check
 expect_code "非法启用值被拒" 2
 expect_has "报错指出列值" "必须是 0 或 1"
@@ -120,6 +124,15 @@ cat > "$WORK/f13.md" <<'EOF'
 EOF
 run "$GEN" --features "$WORK/f13.md" --check
 expect_code "缺表头被拒" 2
+
+echo "== C14 安全底线：不得静默关掉 uhttpd =="
+# luci-light 硬依赖 uhttpd，写 not set 会被 select 覆盖；一旦真被关掉，
+# 刷完就没有 web 界面了（只能 SSH）。这里守住"绝不输出该行"。
+run "$GEN" --features "$FEATURES"
+expect_code "生成成功" 0
+expect_not "未关掉 uhttpd" "# CONFIG_PACKAGE_uhttpd is not set"
+expect_has "quickfile 插件本身在" "CONFIG_PACKAGE_luci-app-quickfile=y"
+expect_not "未引入 nginx（无法与 uhttpd 共存 80）" "CONFIG_PACKAGE_nginx=y"
 
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"

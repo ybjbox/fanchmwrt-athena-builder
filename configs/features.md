@@ -3,6 +3,8 @@
 改需求只改这里：把某行的 `启用` 从 `0` 改成 `1`，`gen-config.sh` 生成 `.config`、`diy.sh` 拉源码，两边同时生效。
 本文件既是脚本的数据源，也是 GitHub 上可直接阅读的表格——没有第二份需要同步的文档。
 
+当前的启停状态**对齐旧仓 `ybjbox/openwrt-ci-roc`**（General / Packages / JDCloud 三份配置）：九个可选插件全部启用。要回到最小集，把某一行的 `启用` 改回 `0` 即可。
+
 ## 列含义
 
 | 列 | 说明 |
@@ -48,16 +50,16 @@
 | tools_base | 1 | 0 | tmux htop nano-full fdisk cfdisk sgdisk tune2fs fstrim openssh-sftp-server zoneinfo-asia coremark automount | | 命令行与磁盘工具 |
 | zram | 1 | 0 | zram-swap | | 内存压缩（内核选项见 gen-config.sh） |
 
-## 默认关闭：每开一个都是独立构建风险点
+## 可选插件：每开一个都是独立构建风险点（对齐旧仓，当前全部启用）
 
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
 |---|---|---|---|---|---|
-| openclash | 0 | 0 | luci-app-openclash | git:https://github.com/vernesong/OpenClash | 代理 |
-| lucky | 0 | 0 | luci-app-lucky | git:https://github.com/gdy666/luci-app-lucky | 内网穿透 |
-| smartdns | 0 | 0 | luci-app-smartdns smartdns | git:https://github.com/pymumu/luci-app-smartdns git:https://github.com/pymumu/openwrt-smartdns | DNS |
-| mosdns | 0 | 0 | luci-app-mosdns | git:https://github.com/sbwml/luci-app-mosdns | DNS 分流 |
-| airconnect | 0 | 0 | luci-app-airconnect airconnect | git:https://github.com/sbwml/luci-app-airconnect | AirPlay 桥接 |
-| wechatpush | 0 | 0 | luci-app-wechatpush | git:https://github.com/tty228/luci-app-wechatpush | 微信推送 |
-| bandix | 0 | 0 | bandix luci-app-bandix | git:https://github.com/timsaya/openwrt-bandix git:https://github.com/timsaya/luci-app-bandix | 流量看板（与 fwx 统计二选一） |
-| quickfile | 0 | 0 | luci-app-quickfile | git:https://github.com/sbwml/luci-app-quickfile | 网页文件管理器（需 nginx） |
-| theme_aurora | 0 | 0 | luci-theme-aurora luci-app-aurora-config | git:https://github.com/eamonxg/luci-theme-aurora git:https://github.com/eamonxg/luci-app-aurora-config | 第三方主题 |
+| openclash | 1 | 0 | luci-app-openclash | git:https://github.com/vernesong/OpenClash | 代理 |
+| lucky | 1 | 0 | luci-app-lucky lucky | git:https://github.com/gdy666/luci-app-lucky | 内网穿透 |
+| smartdns | 1 | 0 | luci-app-smartdns smartdns luci-i18n-smartdns-zh-cn | git:https://github.com/pymumu/luci-app-smartdns git:https://github.com/pymumu/openwrt-smartdns | DNS |
+| mosdns | 1 | 0 | luci-app-mosdns mosdns v2ray-geodata luci-i18n-mosdns-zh-cn | git:https://github.com/sbwml/luci-app-mosdns | DNS 分流 |
+| airconnect | 1 | 0 | luci-app-airconnect airconnect | git:https://github.com/sbwml/luci-app-airconnect | AirPlay 桥接 |
+| wechatpush | 1 | 0 | luci-app-wechatpush | git:https://github.com/tty228/luci-app-wechatpush | 微信推送 |
+| bandix | 1 | 0 | bandix luci-app-bandix | git:https://github.com/timsaya/openwrt-bandix git:https://github.com/timsaya/luci-app-bandix | 流量看板（与 fwx 统计重复，见 README） |
+| quickfile | 1 | 0 | luci-app-quickfile | git:https://github.com/sbwml/luci-app-quickfile | 网页文件管理器。需 nginx 接管 80，而 luci-light 强依赖 uhttpd，本轮不做 web 服务器替换 → 装上但暂不可用 |
+| theme_aurora | 1 | 0 | luci-theme-aurora luci-app-aurora-config | git:https://github.com/eamonxg/luci-theme-aurora git:https://github.com/eamonxg/luci-app-aurora-config | 第三方主题 |

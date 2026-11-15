@@ -30,3 +30,25 @@ kmod-ath11k-ahb
 # ── 个人定制 ──
 luci-app-athena-led
 athena-custom
+luci-app-dhcp-comment
+sysupgrade-clash-cleaner
+luci-app-cf-ipcheck
+
+# ── 随 features.md 启用的可选插件（与旧仓 openwrt-ci-roc 对齐）──
+# 关掉某个开关时，把对应行一起删掉，否则会一直报缺失。
+luci-app-openclash
+lucky
+luci-app-lucky
+smartdns
+luci-app-smartdns
+mosdns
+luci-app-mosdns
+v2ray-geodata
+luci-app-airconnect
+airconnect
+luci-app-wechatpush
+bandix
+luci-app-bandix
+luci-app-quickfile
+luci-theme-aurora
+luci-app-aurora-config

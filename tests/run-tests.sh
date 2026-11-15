@@ -16,15 +16,8 @@ FAIL=0
 CODE=0
 OUT=""
 
-REQUIRED_LIST=(
-  fwxd kmod-fwx libfwx_common
-  luci-app-fwx-dashboard luci-app-fwx-appfilter luci-app-fwx-macfilter
-  luci-app-fwx-traffic-stat luci-app-fwx-session-stat luci-app-fwx-user
-  luci-app-fwx-resources luci-app-fwx-system
-  ipq-wifi-jdcloud_re-cs-02 ath11k-firmware-qcn9074
-  kmod-ath11k-pci kmod-ath11k-ahb
-  luci-app-athena-led athena-custom
-)
+# 直接读清单文件，避免清单增长了而测试还拿着旧副本（会导致假通过）
+mapfile -t REQUIRED_LIST < <(grep -vE '^[[:space:]]*(#|$)' "$LISTS/required-packages.txt")
 
 fill_manifest() {
   local f="$1"; shift

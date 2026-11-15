@@ -32,7 +32,7 @@ scripts/diy.sh                       全部定制（加 feed + clone 两个包�
 scripts/check-packages.sh            包校验
 scripts/gen-lock.sh / verify-lock.sh 版本锁
 scripts/hash-artifacts.sh            SHA256SUMS / BOM / build-info.json
-tests/                               68 条回归断言（12 包校验 + 22 版本锁 + 34 开关）
+tests/                               75 条回归断言（12 包校验 + 22 版本锁 + 41 开关）
 ```
 
 ---
@@ -103,6 +103,22 @@ tests/                               68 条回归断言（12 包校验 + 22 版�
 表格写错会在生成阶段直接报错并给出行号（重名、启用列不是 0/1、列数不对、来源前缀不认识、feed 引用但没声明 URL）。
 
 > **为什么是 Markdown 表格**：`.conf` 的竖线文本在 GitHub 上只是纯文本；`.tsv` 要求每行列数一致，注释行（1 列）与空行（0 列）会让表格视图直接拒绝渲染；YAML 结构更强但 CI 上要额外装 PyYAML。Markdown 表格三样都占：能渲染、能写注释、解析零依赖。
+
+### 当前基线与旧仓的差异
+
+`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**17 条全部启用**，37 个包、13 个 git 源。
+
+三处**刻意不照搬**：
+
+| 项 | 旧仓 | 本仓 | 原因 |
+|---|---|---|---|
+| `luci-app-oaf` | 启用 | 不装 | 与内置 `fwx` 抢 netfilter 钩子与 `/etc/config/appfilter` |
+| NSS / `TESTING_KERNEL` | 启用 | 不装 | snapshot 线无 NSS 卸载栈；且与流量统计、DPI 原理冲突 |
+| `luci-app-quickfile` | 配合 nginx 使用 | 只装插件 | `luci-light` 硬依赖 `uhttpd`（`+uhttpd +uhttpd-mod-ubus`），换 web 服务器要连带拆掉 `luci` 元包，本轮不做 |
+
+`quickfile` 因此**装上但不可用**：它需要 nginx 接管 80，而 uhttpd 由依赖强制启用。要用它，得把 `luci` 换成 `luci-nginx` + 手工挑 `luci-mod-*`（旧仓正是这么做的），这是一次独立改造，不适合和首编混在一起。
+
+`bandix` 已启用，但它靠轮询 conntrack 出数，与 `fwx` 的流量统计**重复**；两者都开只是多一个面板，不影响编译。想留一个就关 `bandix`。
 
 ## 本地复现
 
