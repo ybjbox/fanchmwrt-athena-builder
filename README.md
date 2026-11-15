@@ -32,7 +32,7 @@ scripts/diy.sh                       全部定制（加 feed + clone 两个包�
 scripts/check-packages.sh            包校验
 scripts/gen-lock.sh / verify-lock.sh 版本锁
 scripts/hash-artifacts.sh            SHA256SUMS / BOM / build-info.json
-tests/                               76 条回归断言（12 包校验 + 22 版本锁 + 42 开关）
+tests/                               81 条回归断言（12 包校验 + 22 版本锁 + 47 开关）
 ```
 
 ---
@@ -44,10 +44,12 @@ tests/                               76 条回归断言（12 包校验 + 22 版�
 
    | Secret | 用途 | 必需 |
    |---|---|---|
-   | `MY_PPPOE_USERNAME` / `MY_PPPOE_PASSWORD` | WAN 拨号 | 否（不填则保持 DHCP） |
-   | `MY_WIFI_SSID_2G` / `MY_WIFI_SSID_5G` | 无线名（双 5G 同名漫游） | 否 |
-   | `MY_WIFI_PASSWORD` | 无线密码 | 否 |
-   | `MY_ADMIN_PASSWORD` | root 口令 | 否 |
+   | `PPPOE_USERNAME` / `PPPOE_PASSWORD` | WAN 拨号 | 否（不填则保持 DHCP） |
+   | `WIFI_SSID_2G` / `WIFI_SSID_5G` | 无线名（双 5G 同名漫游） | 否 |
+   | `WIFI_PASSWORD` | 无线密码 | 否 |
+   | `ADMIN_PASSWORD` | root 口令 | 否 |
+
+   Secret 名**没有 `MY_` 前缀**（以仓库 Settings 里实际配置为准）；模板里的占位符 `__MY_*__` 只是 uci-defaults 脚本的固定字面量，两者不要混为一谈。首编曾因这里写成 `MY_*` 导致 `已填充占位符: 0 / 6`，现在流水线会在有未填充项时给出 warning。
 
    不填的项会保持占位符形态，`uci-defaults` 里的 `valid()` 会跳过它，不会把 SSID 写成 `__MY_*`。
 

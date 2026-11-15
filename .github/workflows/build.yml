@@ -63,32 +63,38 @@ jobs:
 
       - name: 注入 Secrets 到默认配置
         env:
-          MY_PPPOE_USERNAME: ${{ secrets.MY_PPPOE_USERNAME }}
-          MY_PPPOE_PASSWORD: ${{ secrets.MY_PPPOE_PASSWORD }}
-          MY_WIFI_SSID_2G: ${{ secrets.MY_WIFI_SSID_2G }}
-          MY_WIFI_SSID_5G: ${{ secrets.MY_WIFI_SSID_5G }}
-          MY_WIFI_PASSWORD: ${{ secrets.MY_WIFI_PASSWORD }}
-          MY_ADMIN_PASSWORD: ${{ secrets.MY_ADMIN_PASSWORD }}
+          PPPOE_USERNAME: ${{ secrets.PPPOE_USERNAME }}
+          PPPOE_PASSWORD: ${{ secrets.PPPOE_PASSWORD }}
+          WIFI_SSID_2G: ${{ secrets.WIFI_SSID_2G }}
+          WIFI_SSID_5G: ${{ secrets.WIFI_SSID_5G }}
+          WIFI_PASSWORD: ${{ secrets.WIFI_PASSWORD }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
           # 用 Python 做字面替换：密码里出现 & | / 等字符时 sed 会静默出错
+          # Secret 名与仓库 Settings 里配置的完全一致（无 MY_ 前缀）；
+          # 占位符 __MY_*__ 是模板里的固定字面量，与 Secret 命名无关。
           python3 - <<'PY'
           import os
 
           path = "files/etc/uci-defaults/99-athena-custom-settings"
           text = open(path, encoding="utf-8").read()
           mapping = {
-              "__MY_PPPOE_USERNAME__": os.environ.get("MY_PPPOE_USERNAME", ""),
-              "__MY_PPPOE_PASSWORD__": os.environ.get("MY_PPPOE_PASSWORD", ""),
-              "__MY_WIFI_SSID_2G__":   os.environ.get("MY_WIFI_SSID_2G", ""),
-              "__MY_WIFI_SSID_5G__":   os.environ.get("MY_WIFI_SSID_5G", ""),
-              "__MY_WIFI_PASSWORD__":  os.environ.get("MY_WIFI_PASSWORD", ""),
-              "__MY_ADMIN_PASSWORD__": os.environ.get("MY_ADMIN_PASSWORD", ""),
+              "__MY_PPPOE_USERNAME__": os.environ.get("PPPOE_USERNAME", ""),
+              "__MY_PPPOE_PASSWORD__": os.environ.get("PPPOE_PASSWORD", ""),
+              "__MY_WIFI_SSID_2G__":   os.environ.get("WIFI_SSID_2G", ""),
+              "__MY_WIFI_SSID_5G__":   os.environ.get("WIFI_SSID_5G", ""),
+              "__MY_WIFI_PASSWORD__":  os.environ.get("WIFI_PASSWORD", ""),
+              "__MY_ADMIN_PASSWORD__": os.environ.get("ADMIN_PASSWORD", ""),
           }
           for k, v in mapping.items():
               text = text.replace(k, v)
           open(path, "w", encoding="utf-8", newline="\n").write(text)
           filled = [k for k, v in mapping.items() if v]
           print("已填充占位符:", len(filled), "/", len(mapping))
+          if len(filled) < len(mapping):
+              missing = [k for k, v in mapping.items() if not v]
+              print("::warning:: %d 个占位符未填充: %s（核对 Secrets 名称）"
+                    % (len(missing), ", ".join(missing)))
           PY
 
       - name: 覆盖默认配置（避免与 athena-custom 自带脚本重复执行）
@@ -119,6 +125,8 @@ jobs:
           bash ../scripts/gen-config.sh --features ../configs/features.md --out .config.fragment
           cat .config.fragment >> .config
           make defconfig
+          echo "---- 无线底座 / geodata / device 追加项（编译前取证）----"
+          grep -E '^CONFIG_(PACKAGE_(v2ray|ipq-wifi|ath11k|kmod-ath11k)|TARGET_DEVICE_PACKAGES_)' .config || true
 
       - name: 校验 required 包（编译前）
         run: bash scripts/check-packages.sh --config openwrt/.config

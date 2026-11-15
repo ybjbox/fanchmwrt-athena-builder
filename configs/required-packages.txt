@@ -26,6 +26,8 @@ luci-app-fwx-system
 luci-compat
 
 # ── 无线底座：DTS 正确但包被裁掉，照样没 WiFi ──
+# 前三项来自 26.11 官方 DEVICE_PACKAGES：image.mk 只在镜像层追加，不生成 .config 符号。
+# gen-config.sh 已显式写 CONFIG_PACKAGE_*=y，编译前校验才看得见它们。
 ipq-wifi-jdcloud_re-cs-02
 ath11k-firmware-qcn9074
 kmod-ath11k-pci
@@ -47,7 +49,11 @@ smartdns
 luci-app-smartdns
 mosdns
 luci-app-mosdns
-v2ray-geodata
+# 地理数据：feeds/packages/net/v2ray-geodata 的 Makefile 只定义 template，
+# 真正可安装的是下面两个（luci-app-mosdns 的 LUCI_DEPENDS 也这么写）。
+# 旧写法 v2ray-geodata 不生成 CONFIG_PACKAGE_* 符号，会被 defconfig 丢掉。
+v2ray-geoip
+v2ray-geosite
 luci-app-airconnect
 airconnect
 luci-app-wechatpush

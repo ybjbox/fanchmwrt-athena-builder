@@ -32,12 +32,17 @@ run "$GEN" --features "$FEATURES"
 expect_code "生成成功" 0
 expect_has "输出目标设备" "CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y"
 expect_has "设备附加包含 athena-led" 'CONFIG_TARGET_DEVICE_PACKAGES_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02="luci-app-athena-led luci-i18n-athena-led-zh-cn"'
+expect_has "无线 board file 显式选中" "CONFIG_PACKAGE_ipq-wifi-jdcloud_re-cs-02=y"
+expect_has "QCN9074 固件显式选中" "CONFIG_PACKAGE_ath11k-firmware-qcn9074=y"
+expect_has "ath11k PCI 驱动显式选中" "CONFIG_PACKAGE_kmod-ath11k-pci=y"
 expect_has "个人包在" "CONFIG_PACKAGE_athena-custom=y"
 expect_has "工具在" "CONFIG_PACKAGE_htop=y"
 expect_has "zram 内核选项在" "CONFIG_KERNEL_ZRAM_BACKEND_LZ4=y"
 expect_has "策略性禁用 OAF" "# CONFIG_PACKAGE_luci-app-oaf is not set"
 expect_has "OpenClash 已启用" "CONFIG_PACKAGE_luci-app-openclash=y"
-expect_has "mosdns 带 geodata" "CONFIG_PACKAGE_v2ray-geodata=y"
+expect_has "mosdns 带 geoip" "CONFIG_PACKAGE_v2ray-geoip=y"
+expect_has "mosdns 带 geosite" "CONFIG_PACKAGE_v2ray-geosite=y"
+expect_not "不再输出无效的 v2ray-geodata" "CONFIG_PACKAGE_v2ray-geodata=y"
 expect_not "bandix 已关闭（fwx 自带统计）" "CONFIG_PACKAGE_luci-app-bandix=y"
 expect_not "第三方主题已关闭" "CONFIG_PACKAGE_luci-theme-aurora=y"
 run "$GEN" --features "$FEATURES" --list-clones

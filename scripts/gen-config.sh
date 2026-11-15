@@ -179,6 +179,13 @@ emit() {
   printf 'CONFIG_TARGET_qualcommax=y\n'
   printf 'CONFIG_TARGET_qualcommax_ipq60xx=y\n'
   printf 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y\n'
+  # 官方 DEVICE_PACKAGES 由 include/image.mk 追加进镜像，不生成 CONFIG_PACKAGE_* 符号，
+  # 因此编译前的 .config 校验看不见它们。这里显式选中同一组包：既保证 make 真编译
+  # 无线底座，也让 required-packages.txt 的编译前校验有据可查（26.11 target 定义核对过）。
+  printf '# ---- 无线底座（与目标设备绑定，不可关）----\n'
+  printf 'CONFIG_PACKAGE_ipq-wifi-jdcloud_re-cs-02=y\n'
+  printf 'CONFIG_PACKAGE_ath11k-firmware-qcn9074=y\n'
+  printf 'CONFIG_PACKAGE_kmod-ath11k-pci=y\n'
   if [ -n "$DEV_EXTRA" ]; then
     local dev_sorted
     dev_sorted="$(echo $DEV_EXTRA | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/ $//')"

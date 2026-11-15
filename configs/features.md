@@ -57,7 +57,7 @@
 | openclash | 1 | 0 | luci-app-openclash | git:https://github.com/vernesong/OpenClash | 代理 |
 | lucky | 1 | 0 | luci-app-lucky lucky | git:https://github.com/gdy666/luci-app-lucky | 内网穿透 |
 | smartdns | 1 | 0 | luci-app-smartdns smartdns luci-i18n-smartdns-zh-cn | git:https://github.com/pymumu/luci-app-smartdns git:https://github.com/pymumu/openwrt-smartdns | DNS |
-| mosdns | 1 | 0 | luci-app-mosdns mosdns v2ray-geodata luci-i18n-mosdns-zh-cn | git:https://github.com/sbwml/luci-app-mosdns | DNS 分流 |
+| mosdns | 1 | 0 | luci-app-mosdns mosdns v2ray-geoip v2ray-geosite luci-i18n-mosdns-zh-cn | git:https://github.com/sbwml/luci-app-mosdns | DNS 分流。v2ray-geodata 只是 PKG_NAME，可选包是 v2ray-geoip / v2ray-geosite，写错会被 defconfig 静默丢弃 |
 | airconnect | 1 | 0 | luci-app-airconnect airconnect | git:https://github.com/sbwml/luci-app-airconnect | AirPlay 桥接 |
 | wechatpush | 1 | 0 | luci-app-wechatpush | git:https://github.com/tty228/luci-app-wechatpush | 微信推送 |
 | bandix | 0 | 0 | bandix luci-app-bandix | git:https://github.com/timsaya/openwrt-bandix git:https://github.com/timsaya/luci-app-bandix | 流量看板。fwx 自带流量/会话统计，装它等于多一个常驻进程轮询 conntrack，故关闭 |
