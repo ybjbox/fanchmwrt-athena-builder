@@ -1,0 +1,105 @@
+#!/bin/sh
+#
+# 99-athena-custom-settings — 首启一次性默认值（uci-defaults 执行后自删）
+#
+# 占位符 __MY_* 由 CI 在编译期用 Secrets 替换；未配置时保持占位符，
+# 下面的 valid() 会把它当作"未设置"，避免把 SSID 写成 __MY_WIFI_SSID_5G__。
+#
+
+PPPOE_USER="__MY_PPPOE_USERNAME__"
+PPPOE_PASS="__MY_PPPOE_PASSWORD__"
+WIFI_2G="__MY_WIFI_SSID_2G__"
+WIFI_5G="__MY_WIFI_SSID_5G__"
+WIFI_PASS="__MY_WIFI_PASSWORD__"
+ADMIN_PASS="__MY_ADMIN_PASSWORD__"
+
+valid() {
+  [ -n "$1" ] || return 1
+  case "$1" in __MY_*) return 1 ;; esac
+  return 0
+}
+
+# ── 1. 主机名 / LAN 地址 ──
+uci set system.@system[0].hostname='Athena'
+uci set network.lan.ipaddr='10.0.0.1'
+uci set network.lan.netmask='255.255.255.0'
+
+# ── 2. PPPoE（凭据齐全才切换，否则保持 DHCP）──
+if valid "$PPPOE_USER" && valid "$PPPOE_PASS"; then
+  uci set network.wan.proto='pppoe'
+  uci set network.wan.username="$PPPOE_USER"
+  uci set network.wan.password="$PPPOE_PASS"
+  uci -q delete network.wan.ipaddr 2>/dev/null || true
+fi
+
+# ── 3. 关闭 IPv6 ──
+uci set network.wan6.disabled='1'
+uci set network.lan.delegate='0'
+uci set network.lan.ipv6='0'
+uci set network.wan.ipv6='0'
+uci set dhcp.lan.dhcpv6='disabled'
+uci -q delete dhcp.lan.ra 2>/dev/null || true
+uci -q delete dhcp.lan.dhcpv6 2>/dev/null || true
+/etc/init.d/odhcpd disable 2>/dev/null || true
+
+# ── 4. 无线：2.4G 独立 SSID，双 5G 同名实现漫游 ──
+[ -s /etc/config/wireless ] || (wifi detect > /etc/config/wireless 2>/dev/null || true)
+uci commit wireless
+wifi up >/dev/null 2>&1 || true
+
+idx=0
+while uci get wireless.@wifi-iface[$idx] >/dev/null 2>&1; do
+  dev=$(uci get wireless.@wifi-iface[$idx].device)
+  band=$(uci -q get wireless.$dev.band)
+  mode=$(uci -q get wireless.$dev.hwmode)
+  if [ "$band" = "2g" ] || [ "$mode" = "11g" ]; then
+    valid "$WIFI_2G" && uci set wireless.@wifi-iface[$idx].ssid="$WIFI_2G"
+  else
+    valid "$WIFI_5G" && uci set wireless.@wifi-iface[$idx].ssid="$WIFI_5G"
+  fi
+  if valid "$WIFI_PASS"; then
+    uci set wireless.@wifi-iface[$idx].encryption='psk2'
+    uci set wireless.@wifi-iface[$idx].key="$WIFI_PASS"
+  fi
+  idx=$((idx + 1))
+done
+
+radio=0
+while uci get wireless.radio$radio >/dev/null 2>&1; do
+  uci set wireless.radio$radio.disabled='0'
+  band=$(uci -q get wireless.radio$radio.band)
+  mode=$(uci -q get wireless.radio$radio.hwmode)
+  if [ "$band" = "2g" ] || [ "$mode" = "11g" ]; then
+    uci set wireless.radio$radio.channel='11'
+    uci set wireless.radio$radio.htmode='HT20'
+  else
+    uci set wireless.radio$radio.channel='auto'
+  fi
+  radio=$((radio + 1))
+done
+
+uci commit wireless
+wifi reload >/dev/null 2>&1 || true
+
+# ── 5. 关闭 Fastnat（流量统计依赖 conntrack，必须保持关闭）──
+uci set fastnat.global.enabled='0'
+uci set fastnat.global.dpi_compat='1'
+uci commit fastnat 2>/dev/null || true
+
+# ── 6. 软件源换国内镜像（FanchmWrt 25.12 用 apk）──
+if [ -f /etc/apk/repositories.d/distfeeds.list ]; then
+  sed -i 's#https://downloads.openwrt.org#https://mirrors.ustc.edu.cn/openwrt#g' \
+    /etc/apk/repositories.d/distfeeds.list 2>/dev/null || true
+fi
+
+# ── 7. root 口令 ──
+if valid "$ADMIN_PASS"; then
+  printf '%s\n%s\n' "$ADMIN_PASS" "$ADMIN_PASS" | passwd root 2>/dev/null || true
+fi
+
+uci commit network
+uci commit dhcp
+uci commit system
+uci commit luci 2>/dev/null || true
+
+exit 0

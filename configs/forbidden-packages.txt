@@ -1,0 +1,54 @@
+# forbidden-packages.txt — 禁止出现 / 需要留意的包
+#
+# [block] 命中即失败：会破坏依赖树，或让流量统计失真
+# [warn]  仅提示：可能是合理依赖，人工确认
+#
+# 支持 glob（* 与 ?）。匹配对象是包名，不含版本号。
+
+[block]
+
+# ── NSS 卸载栈：FanchmWrt 没有这些包，混入会破坏依赖树；
+#    即使编进去也没有对应内核补丁，等于白占体积。
+#    注意：qca-nss-dp 与 kmod-qca-nss-dp 是主线默认的"数据面驱动"，
+#    不属于卸载栈，故意不在此列。
+qca-nss-drv
+qca-nss-drv-*
+qca-nss-ecm
+qca-nss-ecm-*
+qca-nss-clients
+qca-nss-crypto
+qca-nss-capwapmgr
+qca-nss-mirror
+qca-nss-ovs
+nss-firmware
+nss-firmware-*
+sqm-scripts-nss
+luci-app-sqm-scripts-nss
+
+# ── OAF：与内置 fwx 抢 netfilter 钩子与 /etc/config/appfilter，必须二选一 ──
+luci-app-oaf
+luci-app-appfilter
+open-app-filter
+kmod-oaf
+
+# ── 第三方"加速"插件：绕过 netfilter，conntrack 计数不更新，统计必然失真 ──
+luci-app-turboacc
+turboacc
+
+# ── 旧版流量统计：与 fwx 双采集，且依赖 iptables 老链路 ──
+luci-app-wrtbwmon
+wrtbwmon
+
+[warn]
+
+# 旧包过滤体系：25.12 已是 fw4/nftables，出现说明有插件把它拉进来了
+iptables
+ip6tables
+
+# SQM 与硬件/软件 offload 互斥，装了也别开
+luci-app-sqm
+sqm-scripts
+
+# 第三方主题：fwx 页面自带 common.css，换主题不会崩，但视觉会不统一
+luci-theme-argon
+luci-theme-aurora

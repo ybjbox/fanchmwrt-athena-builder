@@ -1,0 +1,32 @@
+# required-packages.txt — 必须出现在固件里的包（缺失即失败）
+#
+# 规则：只放"丢了就等于白刷"的包。功能页、可选工具不要放这里，
+#       否则升级版本时容易误报。
+# 匹配：manifest 按包名精确匹配；.config 按 CONFIG_PACKAGE_<name>=y|m
+#       或 CONFIG_TARGET_DEVICE_PACKAGES_* 里的追加项匹配。
+# 维护：FanchmWrt 版本线变更（24.10 → 25.12 → 26.11）时同步核对一遍。
+
+# ── 行为管理内核：FanchmWrt 的核心卖点，缺一个就等于刷了个普通 OpenWrt ──
+fwxd
+kmod-fwx
+libfwx_common
+
+# ── 行为管理 LuCI 页面 ──
+luci-app-fwx-dashboard
+luci-app-fwx-appfilter
+luci-app-fwx-macfilter
+luci-app-fwx-traffic-stat
+luci-app-fwx-session-stat
+luci-app-fwx-user
+luci-app-fwx-resources
+luci-app-fwx-system
+
+# ── 无线底座：DTS 正确但包被裁掉，照样没 WiFi ──
+ipq-wifi-jdcloud_re-cs-02
+ath11k-firmware-qcn9074
+kmod-ath11k-pci
+kmod-ath11k-ahb
+
+# ── 个人定制 ──
+luci-app-athena-led
+athena-custom

@@ -1,0 +1,14 @@
+# 源码树：每次 CI 现拉
+openwrt/
+
+# 构建产物
+dist/
+*.log
+
+# 版本锁按构建生成；要固定基线时再显式提交
+versions.lock
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
