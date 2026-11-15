@@ -3,7 +3,7 @@
 改需求只改这里：把某行的 `启用` 从 `0` 改成 `1`，`gen-config.sh` 生成 `.config`、`diy.sh` 拉源码，两边同时生效。
 本文件既是脚本的数据源，也是 GitHub 上可直接阅读的表格——没有第二份需要同步的文档。
 
-当前的启停状态**对齐旧仓 `ybjbox/openwrt-ci-roc`**（General / Packages / JDCloud 三份配置）：九个可选插件全部启用。要回到最小集，把某一行的 `启用` 改回 `0` 即可。
+当前的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置），九个可选插件里启用 7 个：`bandix` 与 `theme_aurora` 关闭——前者与 `fwx` 自带的流量统计重复，后者对 `fwx` 页面没有收益。要再减，把某一行的 `启用` 改回 `0` 即可。
 
 ## 列含义
 
@@ -50,7 +50,7 @@
 | tools_base | 1 | 0 | tmux htop nano-full fdisk cfdisk sgdisk tune2fs fstrim openssh-sftp-server zoneinfo-asia coremark automount | | 命令行与磁盘工具 |
 | zram | 1 | 0 | zram-swap | | 内存压缩（内核选项见 gen-config.sh） |
 
-## 可选插件：每开一个都是独立构建风险点（对齐旧仓，当前全部启用）
+## 可选插件：每开一个都是独立构建风险点（旧仓同款，但关掉 bandix 与第三方主题）
 
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
 |---|---|---|---|---|---|
@@ -60,6 +60,6 @@
 | mosdns | 1 | 0 | luci-app-mosdns mosdns v2ray-geodata luci-i18n-mosdns-zh-cn | git:https://github.com/sbwml/luci-app-mosdns | DNS 分流 |
 | airconnect | 1 | 0 | luci-app-airconnect airconnect | git:https://github.com/sbwml/luci-app-airconnect | AirPlay 桥接 |
 | wechatpush | 1 | 0 | luci-app-wechatpush | git:https://github.com/tty228/luci-app-wechatpush | 微信推送 |
-| bandix | 1 | 0 | bandix luci-app-bandix | git:https://github.com/timsaya/openwrt-bandix git:https://github.com/timsaya/luci-app-bandix | 流量看板（与 fwx 统计重复，见 README） |
+| bandix | 0 | 0 | bandix luci-app-bandix | git:https://github.com/timsaya/openwrt-bandix git:https://github.com/timsaya/luci-app-bandix | 流量看板。fwx 自带流量/会话统计，装它等于多一个常驻进程轮询 conntrack，故关闭 |
 | quickfile | 1 | 0 | luci-app-quickfile | git:https://github.com/sbwml/luci-app-quickfile | 网页文件管理器。需 nginx 接管 80，而 luci-light 强依赖 uhttpd，本轮不做 web 服务器替换 → 装上但暂不可用 |
-| theme_aurora | 1 | 0 | luci-theme-aurora luci-app-aurora-config | git:https://github.com/eamonxg/luci-theme-aurora git:https://github.com/eamonxg/luci-app-aurora-config | 第三方主题 |
+| theme_aurora | 0 | 0 | luci-theme-aurora luci-app-aurora-config | git:https://github.com/eamonxg/luci-theme-aurora git:https://github.com/eamonxg/luci-app-aurora-config | 第三方主题。fwx 页面自带样式，换主题只是视觉不一致，收益为零，故关闭 |

@@ -27,7 +27,7 @@ expect_not() {
     *) printf '  PASS  %s\n' "$1"; PASS=$((PASS+1));; esac
 }
 
-echo "== C1 当前基线（对齐旧仓，九个可选插件全开）=="
+echo "== C1 当前基线（旧仓同款，去掉 bandix 与主题）=="
 run "$GEN" --features "$FEATURES"
 expect_code "生成成功" 0
 expect_has "输出目标设备" "CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y"
@@ -37,10 +37,11 @@ expect_has "工具在" "CONFIG_PACKAGE_htop=y"
 expect_has "zram 内核选项在" "CONFIG_KERNEL_ZRAM_BACKEND_LZ4=y"
 expect_has "策略性禁用 OAF" "# CONFIG_PACKAGE_luci-app-oaf is not set"
 expect_has "OpenClash 已启用" "CONFIG_PACKAGE_luci-app-openclash=y"
-expect_has "bandix 已启用" "CONFIG_PACKAGE_luci-app-bandix=y"
 expect_has "mosdns 带 geodata" "CONFIG_PACKAGE_v2ray-geodata=y"
-run "$GEN" --features "$FEATURES" --check
-expect_has "17 条全启用" "启用 17，关闭 0"
+expect_not "bandix 已关闭（fwx 自带统计）" "CONFIG_PACKAGE_luci-app-bandix=y"
+expect_not "第三方主题已关闭" "CONFIG_PACKAGE_luci-theme-aurora=y"
+run "$GEN" --features "$FEATURES" --list-clones
+expect_not "bandix 不再 clone" "openwrt-bandix"
 
 echo "== C2 关掉 OpenClash：包与 clone 一起消失 =="
 sed 's/^| openclash | 1 |/| openclash | 0 |/' "$FEATURES" > "$WORK/f2.md"

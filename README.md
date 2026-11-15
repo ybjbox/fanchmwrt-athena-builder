@@ -106,19 +106,21 @@ tests/                               75 条回归断言（12 包校验 + 22 版�
 
 ### 当前基线与旧仓的差异
 
-`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**17 条全部启用**，37 个包、13 个 git 源。
+`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**15 条启用、2 条关闭**，33 个包、9 个 git 源。
 
-三处**刻意不照搬**：
+五处**刻意不照搬**：
 
 | 项 | 旧仓 | 本仓 | 原因 |
 |---|---|---|---|
 | `luci-app-oaf` | 启用 | 不装 | 与内置 `fwx` 抢 netfilter 钩子与 `/etc/config/appfilter` |
 | NSS / `TESTING_KERNEL` | 启用 | 不装 | snapshot 线无 NSS 卸载栈；且与流量统计、DPI 原理冲突 |
 | `luci-app-quickfile` | 配合 nginx 使用 | 只装插件 | `luci-light` 硬依赖 `uhttpd`（`+uhttpd +uhttpd-mod-ubus`），换 web 服务器要连带拆掉 `luci` 元包，本轮不做 |
+| `bandix` | 启用 | 关闭 | `fwx` 自带流量与会话统计，它靠常驻进程轮询 conntrack 出数，重复且多一份开销 |
+| `luci-theme-aurora` | 启用 | 关闭 | `fwx` 页面样式在插件内自备，换主题只有视觉差异，无功能收益 |
 
 `quickfile` 因此**装上但不可用**：它需要 nginx 接管 80，而 uhttpd 由依赖强制启用。要用它，得把 `luci` 换成 `luci-nginx` + 手工挑 `luci-mod-*`（旧仓正是这么做的），这是一次独立改造，不适合和首编混在一起。
 
-`bandix` 已启用，但它靠轮询 conntrack 出数，与 `fwx` 的流量统计**重复**；两者都开只是多一个面板，不影响编译。想留一个就关 `bandix`。
+`bandix` 关掉后，流量统计只剩 `fwx` 一套（`luci-app-fwx-traffic-stat` + `luci-app-fwx-session-stat`，已在必需包清单里）；两者口径不同，同时开会出现两个数字不一致的面板，反而难判断哪个可信。
 
 ## 本地复现
 

@@ -47,8 +47,4 @@ v2ray-geodata
 luci-app-airconnect
 airconnect
 luci-app-wechatpush
-bandix
-luci-app-bandix
-luci-app-quickfile
-luci-theme-aurora
-luci-app-aurora-config
+luci-app-luci-app-quickfile
