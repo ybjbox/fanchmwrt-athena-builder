@@ -5,14 +5,14 @@
 # 用法：scripts/diy.sh <build-tree>
 #   例：scripts/diy.sh openwrt
 #
-# 开关全部来自 configs/features.conf：改那里，这里自动跟随。
+# 开关全部来自 configs/features.md（Markdown 表格）：改那里，这里自动跟随。
 # 不做 feed 替换、不改内核补丁——那是旧仓 Roc-script.sh 的主要复杂度来源。
 #
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-FEATURES="${FEATURES_FILE:-$REPO_DIR/configs/features.conf}"
+FEATURES="${FEATURES_FILE:-$REPO_DIR/configs/features.md}"
 GEN="$SCRIPT_DIR/gen-config.sh"
 
 TREE="${1:-openwrt}"

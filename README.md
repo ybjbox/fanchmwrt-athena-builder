@@ -15,7 +15,7 @@
 | 个人 4 个插件 + 点阵屏插件 | OAF（由内置 fwx 替代） |
 | 包清单校验 + 版本锁 + 产物哈希 | SDK 独立分包流水线（需要时再加） |
 
-砍掉的不是能力，是组合数。要恢复多机型时，复制本仓改 `configs/features.conf` 与 `required-packages.txt` 即可。
+砍掉的不是能力，是组合数。要恢复多机型时，复制本仓改 `configs/features.md` 与 `required-packages.txt` 即可。
 
 ---
 
@@ -23,8 +23,8 @@
 
 ```
 .github/workflows/build.yml          单条流水线（18 步）
-configs/features.conf                 唯一开关表：编哪些包 + clone 哪些源
-scripts/gen-config.sh                由 features.conf 生成 .config 片段 / clone 清单
+configs/features.md                  唯一开关表（Markdown 表格）：编哪些包 + clone 哪些源
+scripts/gen-config.sh                由 features.md 生成 .config 片段 / clone 清单
 configs/required-packages.txt        必须存在（缺失即失败）
 configs/forbidden-packages.txt       [block] / [warn]
 files/etc/uci-defaults/99-...        首启默认值（PPPoE / WiFi / LAN IP / 关 IPv6）
@@ -32,7 +32,7 @@ scripts/diy.sh                       全部定制（加 feed + clone 两个包�
 scripts/check-packages.sh            包校验
 scripts/gen-lock.sh / verify-lock.sh 版本锁
 scripts/hash-artifacts.sh            SHA256SUMS / BOM / build-info.json
-tests/                               57 条回归断言（12 包校验 + 22 版本锁 + 23 开关）
+tests/                               68 条回归断言（12 包校验 + 22 版本锁 + 34 开关）
 ```
 
 ---
@@ -67,35 +67,42 @@ tests/                               57 条回归断言（12 包校验 + 22 版�
 
 ---
 
-## 能力开关（features.conf）
+## 能力开关（features.md）
 
-一行一个能力，六列：`名称|启用|设备附加包|包列表|来源|说明`。改 `启用` 列即可，配置与 clone 会同时跟随。
+`configs/features.md` 是一张 Markdown 表格，**既是脚本的数据源，也是给人看的文档**。GitHub 上直接渲染成表格，带分组标题和格式说明；改完提交，没有第二份需要同步的文件。
 
-> **为什么不是 `.tsv`**：GitHub 会对 `.tsv` 做表格渲染，期望 Tab 分隔；本文件用竖线（可读性与 diff 更友好），挂 `.tsv` 会一直提示 `No tabs found`。改用 `.conf` 后不再触发。若哪天被 Excel 存成 Tab 分隔，`gen-config.sh` 会直接报错并指到行号。
+列顺序固定：`名称 / 启用 / 设备附加包 / 包列表 / 来源 / 说明`。改 `启用` 列即可，配置与 clone 会同时跟随。
 
 ```
-openclash|0|0|luci-app-openclash|git:https://github.com/vernesong/OpenClash|代理
-tools_base|1|0|tmux htop nano-full ...||命令行与磁盘工具
-athena_custom|1|0|athena-custom|feed:ybjbox=https://github.com/ybjbox/openwrt-packages.git|个人默认值
+| 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
+|---|---|---|---|---|---|
+| openclash | 0 | 0 | luci-app-openclash | git:https://github.com/vernesong/OpenClash | 代理 |
+| tools_base | 1 | 0 | tmux htop nano-full ... | | 命令行与磁盘工具 |
+| athena_custom | 1 | 0 | athena-custom | feed:ybjbox=https://github.com/ybjbox/openwrt-packages.git | 个人默认值 |
 ```
+
+解析规则：只认带 6 列表头的表格（表头必须是 `名称 / 启用 / 设备附加包 / 包列表 / 来源 / 说明`）。`##` 标题、说明段落、其他列数的表格全部忽略——所以文件里可以放心写文档用的表格。每行必须 6 列，少写一个 `|` 会报错并指到行号。
 
 | 想做的事 | 怎么改 |
 |---|---|
-| 开 OpenClash | `openclash\|0\|` → `openclash\|1\|` |
-| 关掉命令行工具 | `tools_base\|1\|` → `tools_base\|0\|` |
+| 开 OpenClash | 该行 `\| 0 \|` → `\| 1 \|` |
+| 关掉命令行工具 | `tools_base` 那行 `\| 1 \|` → `\| 0 \|` |
 | 加一个新插件 | 复制一行，填包名；需要外部源就写 `git:<url>` 或 `feed:<名>=<url>` |
 | 只引用已有 feed | 写 `feed:ybjbox`（URL 由其他行声明） |
+| 单元格里必须写竖线 | 转义成 `\|` |
 | 校验表格有没有写错 | `./scripts/gen-config.sh --check` |
 
 预览生成结果：
 
 ```bash
-./scripts/gen-config.sh --features configs/features.conf            # 打印 .config 片段
-./scripts/gen-config.sh --features configs/features.conf --list-clones
-./scripts/gen-config.sh --features configs/features.conf --check
+./scripts/gen-config.sh --features configs/features.md            # 打印 .config 片段
+./scripts/gen-config.sh --features configs/features.md --list-clones
+./scripts/gen-config.sh --features configs/features.md --check
 ```
 
-表格写错会在生成阶段直接报错并给出行号（重名、启用列不是 0/1、来源前缀不认识、feed 引用但没声明 URL）。
+表格写错会在生成阶段直接报错并给出行号（重名、启用列不是 0/1、列数不对、来源前缀不认识、feed 引用但没声明 URL）。
+
+> **为什么是 Markdown 表格**：`.conf` 的竖线文本在 GitHub 上只是纯文本；`.tsv` 要求每行列数一致，注释行（1 列）与空行（0 列）会让表格视图直接拒绝渲染；YAML 结构更强但 CI 上要额外装 PyYAML。Markdown 表格三样都占：能渲染、能写注释、解析零依赖。
 
 ## 本地复现
 
@@ -106,7 +113,7 @@ cd openwrt && ./scripts/feeds update -a && ./scripts/feeds install -a && cd ..
 
 printf 'CONFIG_TARGET_qualcommax=y\nCONFIG_TARGET_qualcommax_ipq60xx=y\nCONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y\n' > openwrt/.config
 (cd openwrt && make defconfig)
-./scripts/gen-config.sh --features configs/features.conf --out openwrt/.config.fragment
+./scripts/gen-config.sh --features configs/features.md --out openwrt/.config.fragment
 cat openwrt/.config.fragment >> openwrt/.config
 (cd openwrt && make defconfig)
 
@@ -125,7 +132,7 @@ cat openwrt/.config.fragment >> openwrt/.config
 | 维度 | 旧仓 | 本仓 |
 |---|---|---|
 | 源码 | laipeng668/immortalwrt + NSS 补丁 | fanchmwrt-snapshot，无 NSS |
-| 配置 | 7 份 `.config` 双文件合并 | 1 份开关表（自动生成片段） |
+| 配置 | 7 份 `.config` 双文件合并 | 1 份 Markdown 开关表（自动生成片段） |
 | 脚本 | 2 个 / 69 KB（含大量 feed 替换） | 1 个 / 40 行 |
 | 工作流 | 8 个 / 42 KB | 1 个 |
 | 流水线 | 直接 build | 包校验 → 版本锁 → build → manifest 校验 → 哈希 |
@@ -171,7 +178,7 @@ scripts/SDK-script.sh
 
 ## 设计取舍
 
-**为什么用开关表而不是整份 `.config`**：301 KB 的 `.config` 人工维护必漂移。`features.conf` 只表达"我要哪些能力"，由脚本生成 `.config` 片段，升级 FanchmWrt 时自动继承上游默认。代价是每次多跑一遍 `make defconfig`（几秒）。
+**为什么用开关表而不是整份 `.config`**：301 KB 的 `.config` 人工维护必漂移。`features.md` 只表达"我要哪些能力"，由脚本生成 `.config` 片段，升级 FanchmWrt 时自动继承上游默认。代价是每次多跑一遍 `make defconfig`（几秒）。
 
 **为什么开关表同时驱动 clone**：以前"加包"和"加源"分散在 `.config` 与 `diy.sh` 两处，改一处忘一处就会编译失败。现在 `enabled` 为 0 的行既不选包也不 clone，只有一个事实来源。
 
