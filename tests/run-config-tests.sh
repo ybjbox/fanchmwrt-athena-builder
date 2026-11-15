@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# run-config-tests.sh — features.tsv 与 gen-config.sh 的回归测试
+# run-config-tests.sh — features.conf 与 gen-config.sh 的回归测试
 # 用法：bash tests/run-config-tests.sh
 #
 set -uo pipefail
@@ -8,7 +8,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KIT="$(cd "$HERE/.." && pwd)"
 GEN="$KIT/scripts/gen-config.sh"
-FEATURES="$KIT/configs/features.tsv"
+FEATURES="$KIT/configs/features.conf"
 WORK="$(mktemp -d)"
 
 PASS=0; FAIL=0; CODE=0; OUT=""

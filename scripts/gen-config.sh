@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
-# gen-config.sh — 由 features.tsv 生成 .config 片段 / clone 清单 / feed 清单
+# gen-config.sh — 由 features.conf 生成 .config 片段 / clone 清单 / feed 清单
 #
 # 用法：
-#   scripts/gen-config.sh --features configs/features.tsv --out openwrt/.config.fragment
-#   scripts/gen-config.sh --features configs/features.tsv --list-clones    # dest<TAB>url
-#   scripts/gen-config.sh --features configs/features.tsv --list-feeds     # name=url
-#   scripts/gen-config.sh --features configs/features.tsv --check          # 只校验并汇总
+#   scripts/gen-config.sh --features configs/features.conf --out openwrt/.config.fragment
+#   scripts/gen-config.sh --features configs/features.conf --list-clones    # dest<TAB>url
+#   scripts/gen-config.sh --features configs/features.conf --list-feeds     # name=url
+#   scripts/gen-config.sh --features configs/features.conf --check          # 只校验并汇总
 #
 # 退出码：0 成功 / 2 用法或数据错误
 #
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FEATURES="$SCRIPT_DIR/../configs/features.tsv"
+FEATURES="$SCRIPT_DIR/../configs/features.conf"
 MODE="emit"
 OUT=""
 
@@ -50,6 +50,10 @@ while IFS= read -r raw || [ -n "$raw" ]; do
   raw="${raw#$'\xef\xbb\xbf'}"          # 容忍编辑器写入的 UTF-8 BOM
   line="$(trim "$raw")"
   case "$line" in ''|'#'*) continue ;; esac
+  case "$raw" in
+    *"|"*) ;;
+    *) die "第 $lineno 行：缺少分隔符 |（本文件是竖线分隔，不是 Tab 分隔；若从 Excel 导出过请改回来）" ;;
+  esac
 
   IFS='|' read -r name en dev pkgs repo note <<< "$raw"
   name="$(trim "${name:-}")"; en="$(trim "${en:-}")"
@@ -140,7 +144,7 @@ esac
 
 # ---------- 生成 .config 片段 ----------
 emit() {
-  printf '# 由 gen-config.sh 从 features.tsv 生成 — 不要手改\n'
+  printf '# 由 gen-config.sh 从 features.conf 生成 — 不要手改\n'
   printf 'CONFIG_TARGET_qualcommax=y\n'
   printf 'CONFIG_TARGET_qualcommax_ipq60xx=y\n'
   printf 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y\n'

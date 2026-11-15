@@ -15,7 +15,7 @@
 | 个人 4 个插件 + 点阵屏插件 | OAF（由内置 fwx 替代） |
 | 包清单校验 + 版本锁 + 产物哈希 | SDK 独立分包流水线（需要时再加） |
 
-砍掉的不是能力，是组合数。要恢复多机型时，复制本仓改 `configs/features.tsv` 与 `required-packages.txt` 即可。
+砍掉的不是能力，是组合数。要恢复多机型时，复制本仓改 `configs/features.conf` 与 `required-packages.txt` 即可。
 
 ---
 
@@ -23,8 +23,8 @@
 
 ```
 .github/workflows/build.yml          单条流水线（18 步）
-configs/features.tsv                 唯一开关表：编哪些包 + clone 哪些源
-scripts/gen-config.sh                由 features.tsv 生成 .config 片段 / clone 清单
+configs/features.conf                 唯一开关表：编哪些包 + clone 哪些源
+scripts/gen-config.sh                由 features.conf 生成 .config 片段 / clone 清单
 configs/required-packages.txt        必须存在（缺失即失败）
 configs/forbidden-packages.txt       [block] / [warn]
 files/etc/uci-defaults/99-...        首启默认值（PPPoE / WiFi / LAN IP / 关 IPv6）
@@ -67,9 +67,11 @@ tests/                               57 条回归断言（12 包校验 + 22 版�
 
 ---
 
-## 能力开关（features.tsv）
+## 能力开关（features.conf）
 
 一行一个能力，六列：`名称|启用|设备附加包|包列表|来源|说明`。改 `启用` 列即可，配置与 clone 会同时跟随。
+
+> **为什么不是 `.tsv`**：GitHub 会对 `.tsv` 做表格渲染，期望 Tab 分隔；本文件用竖线（可读性与 diff 更友好），挂 `.tsv` 会一直提示 `No tabs found`。改用 `.conf` 后不再触发。若哪天被 Excel 存成 Tab 分隔，`gen-config.sh` 会直接报错并指到行号。
 
 ```
 openclash|0|0|luci-app-openclash|git:https://github.com/vernesong/OpenClash|代理
@@ -88,9 +90,9 @@ athena_custom|1|0|athena-custom|feed:ybjbox=https://github.com/ybjbox/openwrt-pa
 预览生成结果：
 
 ```bash
-./scripts/gen-config.sh --features configs/features.tsv            # 打印 .config 片段
-./scripts/gen-config.sh --features configs/features.tsv --list-clones
-./scripts/gen-config.sh --features configs/features.tsv --check
+./scripts/gen-config.sh --features configs/features.conf            # 打印 .config 片段
+./scripts/gen-config.sh --features configs/features.conf --list-clones
+./scripts/gen-config.sh --features configs/features.conf --check
 ```
 
 表格写错会在生成阶段直接报错并给出行号（重名、启用列不是 0/1、来源前缀不认识、feed 引用但没声明 URL）。
@@ -104,7 +106,7 @@ cd openwrt && ./scripts/feeds update -a && ./scripts/feeds install -a && cd ..
 
 printf 'CONFIG_TARGET_qualcommax=y\nCONFIG_TARGET_qualcommax_ipq60xx=y\nCONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y\n' > openwrt/.config
 (cd openwrt && make defconfig)
-./scripts/gen-config.sh --features configs/features.tsv --out openwrt/.config.fragment
+./scripts/gen-config.sh --features configs/features.conf --out openwrt/.config.fragment
 cat openwrt/.config.fragment >> openwrt/.config
 (cd openwrt && make defconfig)
 
@@ -169,7 +171,7 @@ scripts/SDK-script.sh
 
 ## 设计取舍
 
-**为什么用开关表而不是整份 `.config`**：301 KB 的 `.config` 人工维护必漂移。`features.tsv` 只表达"我要哪些能力"，由脚本生成 `.config` 片段，升级 FanchmWrt 时自动继承上游默认。代价是每次多跑一遍 `make defconfig`（几秒）。
+**为什么用开关表而不是整份 `.config`**：301 KB 的 `.config` 人工维护必漂移。`features.conf` 只表达"我要哪些能力"，由脚本生成 `.config` 片段，升级 FanchmWrt 时自动继承上游默认。代价是每次多跑一遍 `make defconfig`（几秒）。
 
 **为什么开关表同时驱动 clone**：以前"加包"和"加源"分散在 `.config` 与 `diy.sh` 两处，改一处忘一处就会编译失败。现在 `enabled` 为 0 的行既不选包也不 clone，只有一个事实来源。
 

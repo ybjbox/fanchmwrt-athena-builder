@@ -116,7 +116,7 @@ jobs:
             echo 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y'
           } > .config
           make defconfig
-          bash ../scripts/gen-config.sh --features ../configs/features.tsv --out .config.fragment
+          bash ../scripts/gen-config.sh --features ../configs/features.conf --out .config.fragment
           cat .config.fragment >> .config
           make defconfig
 
@@ -130,7 +130,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: openwrt/dl
-          key: dl-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.tsv') }}
+          key: dl-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.conf') }}
           restore-keys: |
             dl-${{ env.SOURCE_REF }}-
 
