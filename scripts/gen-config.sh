@@ -165,17 +165,17 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         if [ "$IS_ON" = "1" ]; then FEED_NEEDED["${token#feed:}"]=1; fi
         ;;
       *)
-        die "第 $lineno 行（$name）：无法识别的来源 '$token'（只支持 git: / gitdir: / feed:）"
+        die "第 $lineno 行（$name）：来源列的写法不认识：'$token'。可用的写法：git:网址、gitdir:网址#分支/子目录、feed:名字=网址"
         ;;
     esac
   done
 done < "$FEATURES"
 
-[ $((ENABLED + DISABLED)) -gt 0 ] || die "未从 $FEATURES 解析到任何功能行（需要 6 列表格 + 表头「名称 | 启用 | ...」；若从 Excel 另存过，分隔符可能被改成了 Tab）"
+[ $((ENABLED + DISABLED)) -gt 0 ] || die "没有从 $FEATURES 读到任何功能行（需要 6 列表格，表头以「名称 | 启用」开头；如果这个文件从 Excel 另存过，竖线可能被改成了 Tab）"
 
 # feed 完整性：被引用但没人声明 URL
 for f in "${!FEED_NEEDED[@]}"; do
-  [ -n "${FEED_URLS[$f]:-}" ] || die "feed '$f' 被引用但未声明 URL（写成 feed:$f=<url>）"
+  [ -n "${FEED_URLS[$f]:-}" ] || die "软件源 '$f' 被用到但没有登记网址（写成 feed:$f=<网址>）"
 done
 
 case "$MODE" in

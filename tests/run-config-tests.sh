@@ -87,7 +87,7 @@ echo "== C6 数据错误：未知来源前缀 =="
 sed 's#git:https://github.com/gdy666/luci-app-lucky#svn:https://github.com/gdy666/luci-app-lucky#' "$FEATURES" > "$WORK/f6.md"
 run "$GEN" --features "$WORK/f6.md" --check
 expect_code "未知来源被拒" 2
-expect_has "报错指出支持的来源" "只支持 git: / gitdir: / feed:"
+expect_has "报错指出支持的来源" "可用的写法：git:网址、gitdir:网址#分支/子目录、feed:名字=网址"
 
 echo "== C7 --check 汇总 =="
 run "$GEN" --features "$FEATURES" --check
@@ -118,7 +118,7 @@ echo "== C11 无表格（如被 Excel 存成 Tab）→ 报错 =="
 printf '名称\t启用\t设备附加包\t包列表\t来源\t说明\nx\t1\t0\tpkg-x\t\t备注\n' > "$WORK/f11.md"
 run "$GEN" --features "$WORK/f11.md" --check
 expect_code "无 6 列表格被拒" 2
-expect_has "提示可能被存成 Tab" "未从"
+expect_has "提示可能被存成 Tab" "没有从"
 
 echo "== C12 单元格内转义竖线 \\| 不破坏列数 =="
 cat > "$WORK/f12.md" <<'EOF'

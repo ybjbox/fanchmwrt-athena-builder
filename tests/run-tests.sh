@@ -106,7 +106,7 @@ for p in "${REQUIRED_LIST[@]}"; do [ "$p" = "fwxd" ] || cfg_list+=("$p"); done
 make_config "$WORK/c6" "${cfg_list[@]}"
 run_case --config "$WORK/c6"
 expect_code "config 缺符号被拦下" 1
-expect_contains "指出是 config 层" "(config)"
+expect_contains "指出是编译前查出的" "(编译前查)"
 
 echo "== t7 .config 仅靠 DEVICE_PACKAGES 提供 kmod-ath11k-ahb → 应通过 =="
 cfg_list=()

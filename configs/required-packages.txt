@@ -1,14 +1,12 @@
-# required-packages.txt — 固定底座包（缺失即失败）
+# required-packages.txt — 固定底座包（"丢了就等于白刷"的东西）
 #
-# 这里只放「跟开关无关、丢了就等于白刷」的包。
-# 由 configs/features.md 启用行带进来的功能包，构建时由
-#   scripts/gen-config.sh --list-required
-# 自动派生，check-packages.sh --features 合并进同一份点名册。
-# 所以：改开关只改 features.md 一处，不要再往本文件里加/删功能包。
+# 这里只放跟开关无关、永远必须装的核心包。
+# 由 configs/features.md 启用行带进来的功能包，构建时会自动并入同一份
+# 检查名单。所以：改开关只改 features.md，不要再往本文件加/删功能包。
 #
-# 匹配：manifest 按包名精确匹配；.config 按 CONFIG_PACKAGE_<name>=y|m
-#       或 CONFIG_TARGET_DEVICE_PACKAGES_* 里的追加项匹配。
-# 维护：FanchmWrt 版本线变更（24.10 → 25.12 → 26.11）时同步核对一遍。
+# 检查方式：编译前查「选中清单」，编译后查「实际装进固件的清单」，
+# 两道都要求名单上的包在场，缺了任何一个构建当场停下。
+# 维护：FanchmWrt 换版本线（24.10 → 25.12 → 26.11）时核对一遍。
 
 # ── 行为管理内核：FanchmWrt 的核心卖点，缺一个就等于刷了个普通 OpenWrt ──
 fwxd
@@ -25,13 +23,13 @@ luci-app-fwx-user
 luci-app-fwx-resources
 luci-app-fwx-system
 
-# ── 应用中心底座：luci-app-fwx-app-center 的 Makefile 声明 +luci-compat ──
-# 由 Kconfig select 自动带入；列在这里是防 make defconfig 静默剔除（同 iStore tar 丢包坑）
+# ── 应用中心底座：应用中心自己声明需要它，系统会自动带入；
+#    列在这里是防它在生成「选中清单」时被悄悄丢掉（以前踩过这种坑）──
 luci-compat
 
-# ── 无线底座：DTS 正确但包被裁掉，照样没 WiFi ──
-# 前三项来自 26.11 官方 DEVICE_PACKAGES：image.mk 只在镜像层追加，不生成 .config 符号。
-# gen-config.sh 已显式写 CONFIG_PACKAGE_*=y，编译前校验才看得见它们。
+# ── 无线底座：这三样不出现在"实际装进固件的清单"里就等于没 WiFi ──
+# 官方设备定义自带它们，但只在镜像层追加、不写进选中清单，
+# 所以这里显式登记，编译前检查才看得见。
 ipq-wifi-jdcloud_re-cs-02
 ath11k-firmware-qcn9074
 kmod-ath11k-pci

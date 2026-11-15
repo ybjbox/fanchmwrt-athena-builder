@@ -35,8 +35,8 @@ usage() {
   cat <<'EOF'
 用法: check-packages.sh [--config <path>] [--manifest <path>] [--features <path>] [--list-dir <dir>] [--strict]
 
-  --config     OpenWrt .config，编译前校验 CONFIG_PACKAGE_* 符号
-  --manifest   固件 .manifest，编译后校验真实安装的包
+  --config     「选中清单」(.config)：编译前查每个包有没有被选中
+  --manifest   「实际装进固件的清单」(.manifest)：编译后查真实装了什么
   --features   features.md；把「启用行」的包名自动并入 required 清单，
                与 configs/required-packages.txt 里的固定底座包合并去重。
                改开关只需改这一处，不必再手改第二份点名册。
@@ -165,7 +165,7 @@ if [ -n "$CONFIG_FILE" ]; then
     if config_enabled "$pkg"; then
       REQ_OK=$((REQ_OK + 1))
     else
-      MISSING+=("$pkg|config")
+      MISSING+=("$pkg|编译前查")
     fi
   done
 
@@ -173,7 +173,7 @@ if [ -n "$CONFIG_FILE" ]; then
     # block 名单里允许 glob，这里对 .config 做全量扫描
     while IFS= read -r sym; do
       [ -z "$sym" ] && continue
-      if matches_any "$sym" "$pkg"; then BLOCKED+=("$sym|config"); fi
+      if matches_any "$sym" "$pkg"; then BLOCKED+=("$sym|编译前查"); fi
     done < <(grep -E '^CONFIG_PACKAGE_[^=]+=[ym]$' "$CONFIG_FILE" 2>/dev/null \
               | sed -E 's/^CONFIG_PACKAGE_([^=]+)=.*/\1/' || true)
   done
@@ -181,7 +181,7 @@ if [ -n "$CONFIG_FILE" ]; then
   for pkg in "${WARN[@]+"${WARN[@]}"}"; do
     while IFS= read -r sym; do
       [ -z "$sym" ] && continue
-      if matches_any "$sym" "$pkg"; then WARNED+=("$sym|config"); fi
+      if matches_any "$sym" "$pkg"; then WARNED+=("$sym|编译前查"); fi
     done < <(grep -E '^CONFIG_PACKAGE_[^=]+=[ym]$' "$CONFIG_FILE" 2>/dev/null \
               | sed -E 's/^CONFIG_PACKAGE_([^=]+)=.*/\1/' || true)
   done
@@ -195,14 +195,14 @@ if [ -n "$MANIFEST_FILE" ]; then
   fi
 
   for pkg in "${REQUIRED[@]+"${REQUIRED[@]}"}"; do
-    manifest_has "$pkg" || MISSING+=("$pkg|manifest")
+    manifest_has "$pkg" || MISSING+=("$pkg|装进固件后查")
   done
 
   while IFS= read -r line; do
     name="${line%%[[:space:]]*}"
     [ -z "$name" ] && continue
-    if matches_any "$name" "${BLOCK[@]+"${BLOCK[@]}"}"; then BLOCKED+=("$name|manifest"); fi
-    if matches_any "$name" "${WARN[@]+"${WARN[@]}"}"; then WARNED+=("$name|manifest"); fi
+    if matches_any "$name" "${BLOCK[@]+"${BLOCK[@]}"}"; then BLOCKED+=("$name|装进固件后查"); fi
+    if matches_any "$name" "${WARN[@]+"${WARN[@]}"}"; then WARNED+=("$name|装进固件后查"); fi
   done < <(awk 'NF>=1 && $1 !~ /^#/ {print $1}' "$MANIFEST_FILE")
 fi
 
@@ -229,7 +229,7 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
   while IFS= read -r item; do
     printf '  - %s (%s)\n' "${item%%|*}" "${item##*|}"
   done < <(dedupe "${MISSING[@]}")
-  printf '  %s→ config 层：检查 CONFIG_PACKAGE_*=y 是否被 defconfig 丢弃；manifest 层：查 feeds install 是否成功%s\n' "$DIM" "$RST"
+  printf '  %s→ 编译前查 = 该包在「选中清单」里被系统自动删掉了；装进固件后查 = 软件源没拉全或包名写错。把这段日志发给助手最快%s\n' "$DIM" "$RST"
 fi
 
 if [ "${#BLOCKED[@]}" -gt 0 ]; then
