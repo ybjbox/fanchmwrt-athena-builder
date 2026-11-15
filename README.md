@@ -106,7 +106,7 @@ tests/                               75 条回归断言（12 包校验 + 22 版�
 
 ### 当前基线与旧仓的差异
 
-`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**15 条启用、2 条关闭**，33 个包、9 个 git 源。
+`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**18 条启用、2 条关闭**，37 个包、9 个 git 源。
 
 五处**刻意不照搬**：
 
@@ -121,6 +121,21 @@ tests/                               75 条回归断言（12 包校验 + 22 版�
 `quickfile` 因此**装上但不可用**：它需要 nginx 接管 80，而 uhttpd 由依赖强制启用。要用它，得把 `luci` 换成 `luci-nginx` + 手工挑 `luci-mod-*`（旧仓正是这么做的），这是一次独立改造，不适合和首编混在一起。
 
 `bandix` 关掉后，流量统计只剩 `fwx` 一套（`luci-app-fwx-traffic-stat` + `luci-app-fwx-session-stat`，已在必需包清单里）；两者口径不同，同时开会出现两个数字不一致的面板，反而难判断哪个可信。
+
+### 定时重启（cron，不是插件）
+
+`luci-app-autoreboot` 不在 `openwrt/luci` 官方 feed（104 个应用里没有），`immortalwrt/luci` 与 `coolsnowwolf/luci` 也已移除，GitHub 上的独立仓都是 2017–2024 的停更 Lua CBI 项目。定时重启本质就是一条 cron，所以直接写进 `99-athena-custom-settings`：
+
+```
+0 4 * * 0 reboot        # 每周日 04:00
+```
+
+- 位置：`/etc/crontabs/root`，带 `# athena-autoreboot` 注释行
+- 改频率：改脚本里的 `REBOOT_CRON`，或在设备上直接改 crontab
+- 取消：删掉那两行，或把 `REBOOT_CRON` 置空
+- 幂等：脚本按注释行判重，重启不会叠加多条
+
+与 `watchcat` 的分工：`watchcat` 管「断网后卡死」，cron 管「定期清内存」。两者不冲突。
 
 ## 本地复现
 

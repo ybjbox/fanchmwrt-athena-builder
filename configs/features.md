@@ -63,3 +63,11 @@
 | bandix | 0 | 0 | bandix luci-app-bandix | git:https://github.com/timsaya/openwrt-bandix git:https://github.com/timsaya/luci-app-bandix | 流量看板。fwx 自带流量/会话统计，装它等于多一个常驻进程轮询 conntrack，故关闭 |
 | quickfile | 1 | 0 | luci-app-quickfile | git:https://github.com/sbwml/luci-app-quickfile | 网页文件管理器。需 nginx 接管 80，而 luci-light 强依赖 uhttpd，本轮不做 web 服务器替换 → 装上但暂不可用 |
 | theme_aurora | 0 | 0 | luci-theme-aurora luci-app-aurora-config | git:https://github.com/eamonxg/luci-theme-aurora git:https://github.com/eamonxg/luci-app-aurora-config | 第三方主题。fwx 页面自带样式，换主题只是视觉不一致，收益为零，故关闭 |
+
+## 基础功能：旧仓没开、按需补上
+
+| 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
+|---|---|---|---|---|---|
+| upnp | 1 | 0 | luci-app-upnp | | 端口自动映射（BT / PS / Xbox）。安全面：等于允许局域网设备自行开洞，与行为管理方向相反 |
+| watchcat | 1 | 0 | luci-app-watchcat watchcat | | 定时 ping，连续失败 N 次自动重启，治"断网后卡死"。定时重启另由 uci-defaults 的 cron 实现——官方 feed 无 luci-app-autoreboot |
+| logrotate | 1 | 0 | logrotate | | 日志轮转，防 /var/log 写满。wechatpush、fwx 都会写日志 |

@@ -48,3 +48,9 @@ luci-app-airconnect
 airconnect
 luci-app-wechatpush
 luci-app-luci-app-quickfile
+
+# ── 基础功能（features.md 的 upnp / watchcat / logrotate）──
+luci-app-upnp
+luci-app-watchcat
+watchcat
+logrotate
