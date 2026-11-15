@@ -52,7 +52,7 @@ jobs:
       - name: 拉取源码
         run: git clone --depth=1 --branch "$SOURCE_REF" "$SOURCE_REPO" openwrt
 
-      - name: 应用定制（加 feed + clone 自定义包）
+      - name: 应用定制（feed + 源码 + 单目录）
         run: bash scripts/diy.sh openwrt
 
       - name: 更新 feeds
@@ -129,7 +129,7 @@ jobs:
           grep -E '^CONFIG_(PACKAGE_(v2ray|ipq-wifi|ath11k|kmod-ath11k)|TARGET_DEVICE_PACKAGES_)' .config || true
 
       - name: 校验 required 包（编译前）
-        run: bash scripts/check-packages.sh --config openwrt/.config
+        run: bash scripts/check-packages.sh --config openwrt/.config --features configs/features.md
 
       - name: 生成版本锁
         run: bash scripts/gen-lock.sh --tree openwrt --out versions.lock
@@ -165,7 +165,7 @@ jobs:
           set -Eeuo pipefail
           M="$(find openwrt/bin/targets -name '*.manifest' -print -quit)"
           [ -n "$M" ] || { echo "找不到 manifest"; exit 1; }
-          bash scripts/check-packages.sh --manifest "$M" --strict
+          bash scripts/check-packages.sh --manifest "$M" --features configs/features.md --strict
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4

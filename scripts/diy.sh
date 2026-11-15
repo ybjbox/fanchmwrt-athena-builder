@@ -46,7 +46,35 @@ while IFS=$'\t' read -r dest url; do
   echo "[diy] clone: $dest"
 done < <(bash "$GEN" --features "$FEATURES" --list-clones)
 
-# ── 3. 权限修正（点阵屏插件需要可执行位）──
+# ── 3. 单目录来源：只取大仓里的一个子目录，不整仓拉 ──
+# 稀疏检出（--filter=blob:none --sparse）只拉元数据 + 目标目录的文件，
+# 避免把别的发行版上百个同名 LuCI 包当成第二个软件源注册进来。
+while IFS=$'\t' read -r dest url ref subdir; do
+  [ -n "${dest:-}" ] || continue
+  if [ -d "package/$dest" ]; then
+    echo "[diy] 已存在，跳过: $dest"
+    continue
+  fi
+  tmp="$(mktemp -d)"
+  git clone --depth=1 --filter=blob:none --sparse --branch "$ref" "$url" "$tmp/src"
+  git -C "$tmp/src" sparse-checkout set "$subdir"
+  [ -d "$tmp/src/$subdir" ] || { echo "[diy] ERROR: 仓库里没有子目录: $subdir" >&2; exit 1; }
+  cp -a "$tmp/src/$subdir" "package/$dest"
+  rm -rf "$tmp"
+
+  # 仓内写法是相对路径 include ../../luci.mk；放到 package/ 下就指错了。
+  # 改指 FanchmWrt 自带的官方 luci feed（feeds.conf.default 里就是它）。
+  sed -i 's#include ../../luci.mk#include $(TOPDIR)/feeds/luci/luci.mk#' "package/$dest/Makefile"
+  grep -qF 'include $(TOPDIR)/feeds/luci/luci.mk' "package/$dest/Makefile" \
+    || { echo "[diy] ERROR: $dest/Makefile 的 luci.mk 引用改写失败（上游可能换了写法）" >&2; exit 1; }
+
+  # git 保留 mode，但保险起见把 init.d / uci-defaults 补上可执行位
+  find "package/$dest/root/etc/init.d" "package/$dest/root/etc/uci-defaults" \
+       -type f -exec chmod +x {} + 2>/dev/null || true
+  echo "[diy] gitdir: $dest <- $url#$ref/$subdir"
+done < <(bash "$GEN" --features "$FEATURES" --list-gitdirs)
+
+# ── 4. 权限修正（点阵屏插件需要可执行位）──
 if [ -d package/luci-app-athena-led ]; then
   chmod +x package/luci-app-athena-led/root/etc/init.d/athena_led \
            package/luci-app-athena-led/root/usr/sbin/athena-led 2>/dev/null || true

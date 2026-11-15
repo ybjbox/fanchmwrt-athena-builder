@@ -22,6 +22,7 @@ FORBIDDEN_FILE="${PACKAGE_FORBIDDEN_FILE:-$LIST_DIR/forbidden-packages.txt}"
 
 CONFIG_FILE=""
 MANIFEST_FILE=""
+FEATURES_FILE=""
 STRICT=0
 
 if [ -t 1 ]; then
@@ -32,10 +33,13 @@ fi
 
 usage() {
   cat <<'EOF'
-用法: check-packages.sh [--config <path>] [--manifest <path>] [--list-dir <dir>] [--strict]
+用法: check-packages.sh [--config <path>] [--manifest <path>] [--features <path>] [--list-dir <dir>] [--strict]
 
   --config     OpenWrt .config，编译前校验 CONFIG_PACKAGE_* 符号
   --manifest   固件 .manifest，编译后校验真实安装的包
+  --features   features.md；把「启用行」的包名自动并入 required 清单，
+               与 configs/required-packages.txt 里的固定底座包合并去重。
+               改开关只需改这一处，不必再手改第二份点名册。
   --list-dir   清单目录，默认 <repo>/configs
   --strict     把 warn 级命中升级为失败
 EOF
@@ -47,6 +51,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --config)   [ $# -ge 2 ] || die "--config 需要参数";   CONFIG_FILE="$2";   shift 2 ;;
     --manifest) [ $# -ge 2 ] || die "--manifest 需要参数"; MANIFEST_FILE="$2"; shift 2 ;;
+    --features) [ $# -ge 2 ] || die "--features 需要参数"; FEATURES_FILE="$2"; shift 2 ;;
     --list-dir) [ $# -ge 2 ] || die "--list-dir 需要参数"; LIST_DIR="$2"; shift 2
                 REQUIRED_FILE="$LIST_DIR/required-packages.txt"
                 FORBIDDEN_FILE="$LIST_DIR/forbidden-packages.txt" ;;
@@ -61,6 +66,10 @@ if [ -n "$CONFIG_FILE" ]; then [ -f "$CONFIG_FILE" ] || die "找不到 config: $
 if [ -n "$MANIFEST_FILE" ]; then [ -f "$MANIFEST_FILE" ] || die "找不到 manifest: $MANIFEST_FILE"; fi
 [ -f "$REQUIRED_FILE" ] || die "找不到 required 清单: $REQUIRED_FILE（可用 --list-dir 指定）"
 [ -f "$FORBIDDEN_FILE" ] || die "找不到 forbidden 清单: $FORBIDDEN_FILE"
+if [ -n "$FEATURES_FILE" ]; then
+  [ -f "$FEATURES_FILE" ] || die "找不到 features 文件: $FEATURES_FILE"
+  [ -f "$SCRIPT_DIR/gen-config.sh" ] || die "缺少 gen-config.sh（--features 需要它派生点名册）"
+fi
 
 # ---------- 读取清单 ----------
 
@@ -76,6 +85,20 @@ while IFS= read -r raw || [ -n "$raw" ]; do
   line="$(trim "$raw")"
   [ -n "$line" ] && REQUIRED+=("$line")
 done < "$REQUIRED_FILE"
+BASE_COUNT="${#REQUIRED[@]}"
+
+# 由 features.md 的启用行自动派生其余包名，与固定底座包合并、去重、排序。
+# 这样「关掉某开关」时点名册自动少几行，不会再出现「开关关了册子还写着」的假失败。
+DERIVED_COUNT=0
+if [ -n "$FEATURES_FILE" ]; then
+  DERIVED="$(bash "$SCRIPT_DIR/gen-config.sh" --features "$FEATURES_FILE" --list-required)" \
+    || die "由 features 派生点名册失败: $FEATURES_FILE"
+  while IFS= read -r p; do
+    [ -n "$p" ] && REQUIRED+=("$p")
+  done <<< "$DERIVED"
+  mapfile -t REQUIRED < <(printf '%s\n' "${REQUIRED[@]}" | awk 'NF && !seen[$0]++')
+  DERIVED_COUNT=$(( ${#REQUIRED[@]} - BASE_COUNT ))
+fi
 
 BLOCK=()
 WARN=()
@@ -193,6 +216,8 @@ dedupe() {
 
 printf '%s[check-packages]%s required=%d block=%d warn=%d\n' \
   "$DIM" "$RST" "${#REQUIRED[@]}" "${#BLOCK[@]}" "${#WARN[@]}"
+printf '%s  required: 固定底座 %d 项 + 开关表自动派生 %d 项%s\n' "$DIM" "$BASE_COUNT" "$DERIVED_COUNT" "$RST"
+[ -n "$FEATURES_FILE" ] && printf '%s  features: %s%s\n' "$DIM" "$FEATURES_FILE" "$RST"
 [ -n "$CONFIG_FILE" ]   && printf '%s  config  : %s%s\n' "$DIM" "$CONFIG_FILE" "$RST"
 [ -n "$MANIFEST_FILE" ] && printf '%s  manifest: %s (%d packages)%s\n' "$DIM" "$MANIFEST_FILE" "$MANIFEST_COUNT" "$RST"
 

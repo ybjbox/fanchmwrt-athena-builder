@@ -8,8 +8,10 @@
 # 用法：
 #   scripts/gen-config.sh --features configs/features.md --out openwrt/.config.fragment
 #   scripts/gen-config.sh --features configs/features.md --list-clones    # dest<TAB>url
-#   scripts/gen-config.sh --features configs/features.md --list-feeds     # name=url
-#   scripts/gen-config.sh --features configs/features.md --check          # 只校验并汇总
+#   scripts/gen-config.sh --features configs/features.md --list-gitdirs    # dest<TAB>url<TAB>ref<TAB>subdir
+#   scripts/gen-config.sh --features configs/features.md --list-feeds       # name=url
+#   scripts/gen-config.sh --features configs/features.md --list-required   # 启用行的包名（点名册自动派生）
+#   scripts/gen-config.sh --features configs/features.md --check           # 只校验并汇总
 #
 # 退出码：0 成功 / 2 用法或数据错误
 #
@@ -26,10 +28,12 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --features) [ $# -ge 2 ] || die "--features 需要参数"; FEATURES="$2"; shift 2 ;;
     --out)      [ $# -ge 2 ] || die "--out 需要参数";      OUT="$2";      shift 2 ;;
-    --list-clones) MODE="clones"; shift ;;
-    --list-feeds)  MODE="feeds";  shift ;;
-    --check)       MODE="check";  shift ;;
-    -h|--help) echo "用法: gen-config.sh [--features <features.md>] [--out <file>|--list-clones|--list-feeds|--check]"; exit 0 ;;
+    --list-clones)   MODE="clones";   shift ;;
+    --list-gitdirs)  MODE="gitdirs";  shift ;;
+    --list-feeds)    MODE="feeds";    shift ;;
+    --list-required) MODE="required"; shift ;;
+    --check)         MODE="check";    shift ;;
+    -h|--help) echo "用法: gen-config.sh [--features <features.md>] [--out <file>|--list-clones|--list-gitdirs|--list-feeds|--list-required|--check]"; exit 0 ;;
     *) die "未知参数: $1" ;;
   esac
 done
@@ -45,6 +49,7 @@ declare -A FEED_URLS=()      # 声明过的 feed（不管启停）
 declare -A FEED_NEEDED=()    # 启用的行引用到的 feed
 DEV_EXTRA=""
 CLONES=""
+GITDIRS=""
 ENABLED=0
 DISABLED=0
 
@@ -131,6 +136,26 @@ while IFS= read -r raw || [ -n "$raw" ]; do
           CLONES+="$dest"$'\t'"$url"$'\n'
         fi
         ;;
+      gitdir:*)
+        # 只取大仓里的一个子目录：gitdir:<url>#<分支>/<子目录>
+        # 例：gitdir:https://github.com/immortalwrt/luci#master/applications/luci-app-autoreboot
+        spec="${token#gitdir:}"
+        case "$spec" in
+          *'#'*'/'*) ;;
+          *) die "第 $lineno 行（$name）：gitdir: 需写成 gitdir:<url>#<分支>/<子目录>" ;;
+        esac
+        url="${spec%%#*}"; rest="${spec#*#}"
+        ref="${rest%%/*}"; subdir="${rest#*/}"
+        [ -n "$url" ] && [ -n "$ref" ] && [ -n "$subdir" ] || \
+          die "第 $lineno 行（$name）：gitdir: 的 URL / 分支 / 子目录都不能为空"
+        case "$subdir" in
+          /*|*'..'*) die "第 $lineno 行（$name）：gitdir: 子目录必须是仓库内相对路径" ;;
+        esac
+        if [ "$IS_ON" = "1" ]; then
+          dest="$(basename "$subdir")"
+          GITDIRS+="$dest"$'\t'"$url"$'\t'"$ref"$'\t'"$subdir"$'\n'
+        fi
+        ;;
       feed:*=*)
         spec="${token#feed:}"
         FEED_URLS["${spec%%=*}"]="${spec#*=}"
@@ -140,7 +165,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         if [ "$IS_ON" = "1" ]; then FEED_NEEDED["${token#feed:}"]=1; fi
         ;;
       *)
-        die "第 $lineno 行（$name）：无法识别的来源 '$token'（只支持 git: 与 feed:）"
+        die "第 $lineno 行（$name）：无法识别的来源 '$token'（只支持 git: / gitdir: / feed:）"
         ;;
     esac
   done
@@ -155,7 +180,11 @@ done
 
 case "$MODE" in
   clones)
-    [ -n "$CLONES" ] && printf '%s' "$CLONES" | sort -u
+    if [ -n "$CLONES" ]; then printf '%s' "$CLONES" | sort -u; fi
+    exit 0
+    ;;
+  gitdirs)
+    if [ -n "$GITDIRS" ]; then printf '%s' "$GITDIRS" | sort -u; fi
     exit 0
     ;;
   feeds)
@@ -164,11 +193,21 @@ case "$MODE" in
     done
     exit 0
     ;;
+  required)
+    # 点名册自动派生：只输出「启用行」的包名，排序去重。
+    # 与开关表天然同步：把 1 改成 0，这里立刻少几行，不用再手改第二份清单。
+    if [ "${#PKGS[@]}" -gt 0 ]; then
+      printf '%s\n' "${!PKGS[@]}" | sort -u
+    fi
+    exit 0
+    ;;
   check)
     printf '[gen-config] 功能项：启用 %d，关闭 %d，包 %d 个，设备附加包 %d 个\n' \
       "$ENABLED" "$DISABLED" "${#PKGS[@]}" "$(echo $DEV_EXTRA | wc -w | tr -d ' ')"
     printf '  git 源：%s 个\n' "$(printf '%s' "$CLONES" | grep -c . || true)"
+    printf '  gitdir：%s 个\n' "$(printf '%s' "$GITDIRS" | grep -c . || true)"
     printf '  feed  ：%s 个\n' "${#FEED_NEEDED[@]}"
+    printf '  自动派生点名册：%d 项（--list-required）\n' "${#PKGS[@]}"
     exit 0
     ;;
 esac

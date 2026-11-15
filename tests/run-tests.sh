@@ -38,7 +38,7 @@ make_config() {
   local p
   for p in "$@"; do
     case "$p" in
-      luci-app-athena-led) continue ;;
+      luci-app-athena-led) continue ;;   # 由上面的 DEVICE_PACKAGES 追加项提供
     esac
     printf 'CONFIG_PACKAGE_%s=y\n' "$p" >> "$f"
   done
@@ -108,14 +108,42 @@ run_case --config "$WORK/c6"
 expect_code "config 缺符号被拦下" 1
 expect_contains "指出是 config 层" "(config)"
 
-echo "== t7 .config 仅靠 DEVICE_PACKAGES 提供 luci-app-athena-led → 应通过 =="
-make_config "$WORK/c7" "${REQUIRED_LIST[@]}"
+echo "== t7 .config 仅靠 DEVICE_PACKAGES 提供 kmod-ath11k-ahb → 应通过 =="
+cfg_list=()
+for p in "${REQUIRED_LIST[@]}"; do [ "$p" = "kmod-ath11k-ahb" ] || cfg_list+=("$p"); done
+make_config "$WORK/c7" "${cfg_list[@]}"
+sed -i 's/luci-i18n-athena-led-zh-cn"/luci-i18n-athena-led-zh-cn kmod-ath11k-ahb"/' "$WORK/c7"
 run_case --config "$WORK/c7"
 expect_code "DEVICE_PACKAGES 追加项被识别" 0
 
 echo "== t8 无参数 → 退出码 2 =="
 run_case
 expect_code "报用法错误" 2
+
+echo "== t9 --features：开关表启用行自动并入点名册 =="
+cat > "$WORK/f9.md" <<'EOF'
+| 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
+|---|---|---|---|---|---|
+| extra | 1 | 0 | pkg-from-features | | 测试自动派生 |
+EOF
+fill_manifest "$WORK/m9a" "${REQUIRED_LIST[@]}"
+run_case --manifest "$WORK/m9a" --features "$WORK/f9.md"
+expect_code "派生包缺失被拦下" 1
+expect_contains "诊断点名派生包" "pkg-from-features"
+expect_contains "日志说明清单来源" "开关表自动派生"
+
+fill_manifest "$WORK/m9b" "${REQUIRED_LIST[@]}" pkg-from-features
+run_case --manifest "$WORK/m9b" --features "$WORK/f9.md"
+expect_code "派生包齐全则通过" 0
+
+echo "== t10 关掉开关后不再要求该包（核心：只改一处）=="
+sed 's/^| extra | 1 |/| extra | 0 |/' "$WORK/f9.md" > "$WORK/f9off.md"
+run_case --manifest "$WORK/m9a" --features "$WORK/f9off.md"
+expect_code "关掉后清单自动缩短、不再报缺" 0
+
+echo "== t11 --features 指向不存在的文件 → 退出 2 =="
+run_case --manifest "$WORK/m9b" --features "$WORK/nope.md"
+expect_code "缺 features 文件报错" 2
 
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"

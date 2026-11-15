@@ -12,10 +12,12 @@
 |---|---|
 | 雅典娜单机型固件 | 亚瑟 / 太乙 / x86 / ipq807x |
 | FanchmWrt snapshot 线（默认 `fanchmwrt-26.11`） | ImmortalWrt / LibWrt / 官方 OpenWrt 线 |
-| 个人 4 个插件 + 点阵屏插件 | OAF（由内置 fwx 替代） |
+| 个人 4 个插件 + 点阵屏 + ImmortalWrt 定时重启单目录 | OAF（由内置 fwx 替代） |
 | 包清单校验 + 版本锁 + 产物哈希 | SDK 独立分包流水线（需要时再加） |
 
-砍掉的不是能力，是组合数。要恢复多机型时，复制本仓改 `configs/features.md` 与 `required-packages.txt` 即可。
+砍掉的不是能力，是组合数。要恢复多机型时，复制本仓改 `configs/features.md` 即可；`required-packages.txt` 只存固定底座包，功能包由开关表自动派生。
+
+> 源码线仍是 FanchmWrt。表格里「不做 ImmortalWrt 线」指的是**不换成它的整条源码与软件源**；`luci-app-autoreboot` 只是从它的仓库里取一个应用目录（9 个文件），用本仓官方 luci 的规则编译。
 
 ---
 
@@ -23,16 +25,16 @@
 
 ```
 .github/workflows/build.yml          单条流水线（18 步）
-configs/features.md                  唯一开关表（Markdown 表格）：编哪些包 + clone 哪些源
-scripts/gen-config.sh                由 features.md 生成 .config 片段 / clone 清单
-configs/required-packages.txt        必须存在（缺失即失败）
+configs/features.md                  唯一开关表：编哪些包 + 拉哪些源 + 自动派生点名册
+scripts/gen-config.sh                由 features.md 生成 .config 片段 / clone / gitdir / required 清单
+configs/required-packages.txt        16 个固定底座包（其余由开关表自动派生，不要手改）
 configs/forbidden-packages.txt       [block] / [warn]
-files/etc/uci-defaults/99-...        首启默认值（PPPoE / WiFi / LAN IP / 关 IPv6）
-scripts/diy.sh                       全部定制（加 feed + clone 两个包，约 40 行）
-scripts/check-packages.sh            包校验
+files/etc/uci-defaults/99-...        首启默认值（PPPoE / WiFi / LAN IP / 关 IPv6；不含定时重启）
+scripts/diy.sh                       全部定制（feed + clone + 稀疏取单目录）
+scripts/check-packages.sh            包校验（--features 合并自动派生的点名册）
 scripts/gen-lock.sh / verify-lock.sh 版本锁
 scripts/hash-artifacts.sh            SHA256SUMS / BOM / build-info.json
-tests/                               81 条回归断言（12 包校验 + 22 版本锁 + 47 开关）
+tests/                               108 条回归断言（18 包校验 + 22 版本锁 + 68 开关）
 ```
 
 ---
@@ -73,7 +75,7 @@ tests/                               81 条回归断言（12 包校验 + 22 版�
 
 `configs/features.md` 是一张 Markdown 表格，**既是脚本的数据源，也是给人看的文档**。GitHub 上直接渲染成表格，带分组标题和格式说明；改完提交，没有第二份需要同步的文件。
 
-列顺序固定：`名称 / 启用 / 设备附加包 / 包列表 / 来源 / 说明`。改 `启用` 列即可，配置与 clone 会同时跟随。
+列顺序固定：`名称 / 启用 / 设备附加包 / 包列表 / 来源 / 说明`。**只改 `启用` 列的 `1` / `0`**：`.config`、源码拉取、以及编译前后两道校验用的「点名册」会同时跟随，不需要再手动改 `required-packages.txt`。
 
 ```
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
@@ -89,7 +91,9 @@ tests/                               81 条回归断言（12 包校验 + 22 版�
 |---|---|
 | 开 OpenClash | 该行 `\| 0 \|` → `\| 1 \|` |
 | 关掉命令行工具 | `tools_base` 那行 `\| 1 \|` → `\| 0 \|` |
+| 关掉某插件后担心点名册 | **不用管**，点名册由开关表自动派生，关掉就自动少几行 |
 | 加一个新插件 | 复制一行，填包名；需要外部源就写 `git:<url>` 或 `feed:<名>=<url>` |
+| 只取别的大仓里一个插件目录 | 写 `gitdir:<url>#<分支>/<子目录>`（稀疏检出，不整仓拉） |
 | 只引用已有 feed | 写 `feed:ybjbox`（URL 由其他行声明） |
 | 单元格里必须写竖线 | 转义成 `\|` |
 | 校验表格有没有写错 | `./scripts/gen-config.sh --check` |
@@ -99,16 +103,31 @@ tests/                               81 条回归断言（12 包校验 + 22 版�
 ```bash
 ./scripts/gen-config.sh --features configs/features.md            # 打印 .config 片段
 ./scripts/gen-config.sh --features configs/features.md --list-clones
+./scripts/gen-config.sh --features configs/features.md --list-gitdirs
+./scripts/gen-config.sh --features configs/features.md --list-required  # 自动派生的点名册
 ./scripts/gen-config.sh --features configs/features.md --check
 ```
 
-表格写错会在生成阶段直接报错并给出行号（重名、启用列不是 0/1、列数不对、来源前缀不认识、feed 引用但没声明 URL）。
+表格写错会在生成阶段直接报错并给出行号（重名、启用列不是 0/1、列数不对、来源前缀不认识、feed 引用但没声明 URL、`gitdir:` 子目录写成绝对路径）。
+
+### 点名册自动派生（只改一处）
+
+早期版本里开关表和 `configs/required-packages.txt` 要手动对齐：关掉某个插件却忘了删点名册里的那一行，编译前校验就会报「缺少必需包」停下来。现在不再需要这一步：
+
+| | 内容 | 谁维护 |
+|---|---|---|
+| `configs/required-packages.txt` | 16 个固定底座包（fwx 内核与页面、`luci-compat`、4 个无线包） | 换 FanchmWrt 版本线时才核对 |
+| `--list-required` | 当前 39 项，全部来自 `features.md` 的**启用行** | 改开关自动变化 |
+
+`check-packages.sh --features configs/features.md` 把两者合并去重，编译前（查 `.config`）和编译后（查 manifest）两道校验共用同一份清单，日志里会打印「固定底座 16 项 + 开关表自动派生 N 项」。
+
+> **比旧版更严，这是有意的**：以前很多启用包根本没被检查，现在是逐个核对。如果某个包在 feeds 里不存在或名字写错，`make defconfig` 会把它静默丢掉，编译前这一步就会点名报出来——把隐患提前暴露，而不是等到刷机后才发现插件没装上。报缺包时先看日志点的是哪个包，通常是包名笔误或对应 feed 没拉到。
 
 > **为什么是 Markdown 表格**：`.conf` 的竖线文本在 GitHub 上只是纯文本；`.tsv` 要求每行列数一致，注释行（1 列）与空行（0 列）会让表格视图直接拒绝渲染；YAML 结构更强但 CI 上要额外装 PyYAML。Markdown 表格三样都占：能渲染、能写注释、解析零依赖。
 
 ### 当前基线与旧仓的差异
 
-`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**18 条启用、2 条关闭**，37 个包、9 个 git 源。
+`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**19 条启用、2 条关闭**，39 个包、9 个 git 源 + 1 个 `gitdir` 单目录。
 
 五处**刻意不照搬**：
 
@@ -124,20 +143,21 @@ tests/                               81 条回归断言（12 包校验 + 22 版�
 
 `bandix` 关掉后，流量统计只剩 `fwx` 一套（`luci-app-fwx-traffic-stat` + `luci-app-fwx-session-stat`，已在必需包清单里）；两者口径不同，同时开会出现两个数字不一致的面板，反而难判断哪个可信。
 
-### 定时重启（cron，不是插件）
+### 定时重启（ImmortalWrt 插件，网页可改）
 
-`luci-app-autoreboot` 不在 `openwrt/luci` 官方 feed（104 个应用里没有），`immortalwrt/luci` 与 `coolsnowwolf/luci` 也已移除，GitHub 上的独立仓都是 2017–2024 的停更 Lua CBI 项目。定时重启本质就是一条 cron，所以直接写进 `99-athena-custom-settings`：
+> 更正：早前本文件写「ImmortalWrt 也已移除 `luci-app-autoreboot`」是查错了。`immortalwrt/luci` 的 `applications/luci-app-autoreboot` 是 2025 年的新版（JS 页面 + procd 服务 + UCI 配置），官方软件仓库也提供 ipk。
 
-```
-0 4 * * 0 reboot        # 每周日 04:00
-```
+FanchmWrt 用的是官方 `openwrt/luci`（104 个应用），不带这个应用。构建时用 `gitdir:` **只取这一个目录**（9 个文件）放进 `package/`，并把 Makefile 的 `include ../../luci.mk` 改指 `$(TOPDIR)/feeds/luci/luci.mk`。
 
-- 位置：`/etc/crontabs/root`，带 `# athena-autoreboot` 注释行
-- 改频率：改脚本里的 `REBOOT_CRON`，或在设备上直接改 crontab
-- 取消：删掉那两行，或把 `REBOOT_CRON` 置空
-- 幂等：脚本按注释行判重，重启不会叠加多条
+**为什么不整仓拉**：`immortalwrt/luci` 约 717 MB / 167 个应用，与官方 luci 绝大部分包同名；整仓当第二个软件源加进来会互相覆盖、`feeds install -a` 依赖解析错乱，而且它的 `luci.mk` 带 ucode 模板版本要求，与本仓官方规则不一致。稀疏检出只下 9 个文件，三个问题全避开。插件用的是标准 `uci` / `crontab` / `procd` 接口，跨版本风险小。
 
-与 `watchcat` 的分工：`watchcat` 管「断网后卡死」，cron 管「定期清内存」。两者不冲突。
+- 位置：网页「系统 → 定时重启」（`admin/system/autoreboot`）
+- 默认：插件自带 `/etc/config/autoreboot` 是 `enabled=0`（周日 02:00 但**不启用**）；固件**不做任何预置**，刷完不会自动重启
+- 启用、改时间：直接在网页上点，即时生效，**不用重新编译固件**（服务按 `#autoreboot_` 标记动态管理 crontab，不会叠加多条）
+- 首启脚本 `99-athena-custom-settings` 原先那条写死的 `0 4 * * 0 reboot` 已删除，避免两套计划重复重启
+- 界面语言：插件自带 `po/zh_Hans`，`CONFIG_LUCI_LANG_zh_Hans=y` 时由官方 `luci.mk` 生成中文语言包
+- 与 `watchcat` 的分工：`watchcat` 管「断网后卡死」的异常自愈，`autoreboot` 管「计划性定期重启」，互不冲突
+- 退路：若首次构建实测该页面打不开，可刷机后在「系统 → 软件包」手动装 ImmortalWrt 官方 ipk，不必重编固件（但每次刷机要重装一次）
 
 ## 本地复现
 
@@ -152,7 +172,7 @@ printf 'CONFIG_TARGET_qualcommax=y\nCONFIG_TARGET_qualcommax_ipq60xx=y\nCONFIG_T
 cat openwrt/.config.fragment >> openwrt/.config
 (cd openwrt && make defconfig)
 
-./scripts/check-packages.sh --config openwrt/.config
+./scripts/check-packages.sh --config openwrt/.config --features configs/features.md
 ./scripts/gen-lock.sh --tree openwrt --out versions.lock
 (cd openwrt && make -j"$(nproc)")
 ./scripts/hash-artifacts.sh --tree openwrt --out dist --lock versions.lock
@@ -203,7 +223,9 @@ scripts/SDK-script.sh
 
 | 现象 | 先查 |
 |---|---|
+| 编译前报「缺少必需包」 | 看日志点名的是固定底座还是**开关表派生项**：派生项多半是包名笔误或对应 feed 没拉到，被 `make defconfig` 静默丢弃；对照 `features.md` 那一行的包列表 |
 | `check-packages` 报缺 `luci-app-fwx-*` | feeds 是否 `update -a` 成功；`source_ref` 是否切到了没有 fwx 的分支 |
+| 「系统 → 定时重启」打不开 | 看 `diy.sh` 的 `gitdir` 步骤是否拿到 9 个文件、Makefile 的 `luci.mk` 引用是否改写成功；退路是手动装 ipk |
 | manifest 校验报 `qca-nss-ecm` | `source_ref` 混入了 NSS 补丁分支 |
 | 编译过但 WiFi 不起 | `ipq-wifi-jdcloud_re-cs-02` 是否在 manifest；DTS 是否为 26.11 分支自带 |
 | 刷后登录不了 | `uci-defaults` 里 LAN IP 改成了 10.0.0.1；用该网段访问 |
@@ -216,6 +238,8 @@ scripts/SDK-script.sh
 **为什么用开关表而不是整份 `.config`**：301 KB 的 `.config` 人工维护必漂移。`features.md` 只表达"我要哪些能力"，由脚本生成 `.config` 片段，升级 FanchmWrt 时自动继承上游默认。代价是每次多跑一遍 `make defconfig`（几秒）。
 
 **为什么开关表同时驱动 clone**：以前"加包"和"加源"分散在 `.config` 与 `diy.sh` 两处，改一处忘一处就会编译失败。现在 `enabled` 为 0 的行既不选包也不 clone，只有一个事实来源。
+
+**为什么点名册也由开关表自动派生**：以前额外还有一份手写 `required-packages.txt`，关了开关忘了删对应行，构建就会卡在「缺少必需包」——这是非专业使用者最容易踩的坑。合并成单一事实来源后，改开关即改清单，编译前后两道校验共用。代价是校验从「漏检」变成「真检查」：所有启用包都必须真的出现在 `.config` 与 manifest 里，缺依赖会在编译前就点名报出来。
 
 **为什么没有 SDK 分包流水线**：4 个自定义包已随固件编入，单独出 ipk 只会增加发布面。要分发插件时再加，`Build-Packages.yml` 可从旧仓照搬。
 

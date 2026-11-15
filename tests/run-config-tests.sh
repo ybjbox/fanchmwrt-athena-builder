@@ -26,6 +26,13 @@ expect_not() {
   case "$OUT" in *"$2"*) printf '  FAIL  %s（不应包含: %s）\n' "$1" "$2"; FAIL=$((FAIL+1));;
     *) printf '  PASS  %s\n' "$1"; PASS=$((PASS+1));; esac
 }
+expect_line() { # desc exact-line：用于清单类输出，避免子串误判
+  if printf '%s\n' "$OUT" | grep -qxF "$2"; then
+    printf '  PASS  %s\n' "$1"; PASS=$((PASS+1))
+  else
+    printf '  FAIL  %s（清单里没有整行: %s）\n' "$1" "$2"; FAIL=$((FAIL+1))
+  fi
+}
 
 echo "== C1 当前基线（旧仓同款，去掉 bandix 与主题）=="
 run "$GEN" --features "$FEATURES"
@@ -40,6 +47,7 @@ expect_has "工具在" "CONFIG_PACKAGE_htop=y"
 expect_has "zram 内核选项在" "CONFIG_KERNEL_ZRAM_BACKEND_LZ4=y"
 expect_has "策略性禁用 OAF" "# CONFIG_PACKAGE_luci-app-oaf is not set"
 expect_has "OpenClash 已启用" "CONFIG_PACKAGE_luci-app-openclash=y"
+expect_has "ImmortalWrt 定时重启已启用" "CONFIG_PACKAGE_luci-app-autoreboot=y"
 expect_has "mosdns 带 geoip" "CONFIG_PACKAGE_v2ray-geoip=y"
 expect_has "mosdns 带 geosite" "CONFIG_PACKAGE_v2ray-geosite=y"
 expect_not "不再输出无效的 v2ray-geodata" "CONFIG_PACKAGE_v2ray-geodata=y"
@@ -79,7 +87,7 @@ echo "== C6 数据错误：未知来源前缀 =="
 sed 's#git:https://github.com/gdy666/luci-app-lucky#svn:https://github.com/gdy666/luci-app-lucky#' "$FEATURES" > "$WORK/f6.md"
 run "$GEN" --features "$WORK/f6.md" --check
 expect_code "未知来源被拒" 2
-expect_has "报错指出只支持 git/feed" "只支持 git: 与 feed:"
+expect_has "报错指出支持的来源" "只支持 git: / gitdir: / feed:"
 
 echo "== C7 --check 汇总 =="
 run "$GEN" --features "$FEATURES" --check
@@ -139,6 +147,72 @@ expect_code "生成成功" 0
 expect_not "未关掉 uhttpd" "# CONFIG_PACKAGE_uhttpd is not set"
 expect_has "quickfile 插件本身在" "CONFIG_PACKAGE_luci-app-quickfile=y"
 expect_not "未引入 nginx（无法与 uhttpd 共存 80）" "CONFIG_PACKAGE_nginx=y"
+
+echo "== C15 点名册自动派生：改开关，清单自动跟着变 =="
+run "$GEN" --features "$FEATURES" --list-required
+expect_code "派生清单生成成功" 0
+BASE_N=$(printf '%s\n' "$OUT" | grep -c .)
+expect_line "启用行的 autoreboot 在清单里" 'luci-app-autoreboot'
+expect_line "启用行的工具包在清单里" 'htop'
+
+sed 's/^| autoreboot | 1 |/| autoreboot | 0 |/' "$FEATURES" > "$WORK/f15a.md"
+run "$GEN" --features "$WORK/f15a.md" --list-required
+expect_not "关掉 autoreboot 后清单不再要求它" 'luci-app-autoreboot'
+N_A=$(printf '%s\n' "$OUT" | grep -c .)
+if [ "$N_A" -eq "$((BASE_N - 1))" ]; then
+  printf '  PASS  关一个单包开关，清单恰好少 1 行\n'; PASS=$((PASS+1))
+else
+  printf '  FAIL  清单行数不对（基线 %s，关掉后 %s）\n' "$BASE_N" "$N_A"; FAIL=$((FAIL+1))
+fi
+
+sed 's/^| tools_base | 1 |/| tools_base | 0 |/' "$FEATURES" > "$WORK/f15b.md"
+run "$GEN" --features "$WORK/f15b.md" --list-required
+expect_not "关掉工具组后 htop 也不在清单" 'htop'
+N_B=$(printf '%s\n' "$OUT" | grep -c .)
+# 包数从表里现取，以后往 tools_base 增删包也不会让断言变假
+TOOLS_N=$(sed -n 's/^| tools_base | [01] | [01] | \([^|]*\) |.*/\1/p' "$FEATURES" | wc -w | tr -d ' ')
+if [ "$N_B" -eq "$((BASE_N - TOOLS_N))" ]; then
+  printf '  PASS  关掉整行（%s 个包），清单恰好少 %s 行\n' "$TOOLS_N" "$TOOLS_N"; PASS=$((PASS+1))
+else
+  printf '  FAIL  多行包没有整行同步（基线 %s，关掉后 %s，期望 %s）\n' \
+    "$BASE_N" "$N_B" "$((BASE_N - TOOLS_N))"; FAIL=$((FAIL+1))
+fi
+
+sed 's/^| bandix | 0 |/| bandix | 1 |/' "$FEATURES" > "$WORK/f15c.md"
+run "$GEN" --features "$WORK/f15c.md" --list-required
+expect_line "原本关闭的 bandix 打开后自动进清单" 'bandix'
+expect_line "同一行的第二个包也自动进清单" 'luci-app-bandix'
+
+echo "== C16 gitdir 单目录来源（不整仓拉）=="
+run "$GEN" --features "$FEATURES" --list-gitdirs
+expect_code "gitdir 清单生成成功" 0
+expect_has "目标目录名" "luci-app-autoreboot"
+expect_has "分支" "master"
+expect_has "子目录" "applications/luci-app-autoreboot"
+expect_has "仓库" "immortalwrt/luci"
+run "$GEN" --features "$FEATURES" --list-clones
+expect_not "没有把 ImmortalWrt 整仓 clone" "immortalwrt/luci"
+run "$GEN" --features "$WORK/f15a.md" --list-gitdirs
+expect_not "关掉后不再取该目录" "luci-app-autoreboot"
+
+echo "== C17 gitdir 写法错误要能拦住 =="
+cat > "$WORK/f17a.md" <<'EOF'
+| 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
+|---|---|---|---|---|---|
+| x | 1 | 0 | pkg-x | gitdir:https://example.com/r.git | 缺分支与子目录 |
+EOF
+run "$GEN" --features "$WORK/f17a.md" --check
+expect_code "gitdir 缺路径被拒" 2
+expect_has "报错指出正确写法" "gitdir: 需写成"
+
+cat > "$WORK/f17b.md" <<'EOF'
+| 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
+|---|---|---|---|---|---|
+| x | 1 | 0 | pkg-x | gitdir:https://example.com/r.git#master/../../etc | 越界 |
+EOF
+run "$GEN" --features "$WORK/f17b.md" --check
+expect_code "子目录越界被拒" 2
+expect_has "报错要求仓库内相对路径" "仓库内相对路径"
 
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"

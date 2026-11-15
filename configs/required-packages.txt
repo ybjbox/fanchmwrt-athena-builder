@@ -1,7 +1,11 @@
-# required-packages.txt — 必须出现在固件里的包（缺失即失败）
+# required-packages.txt — 固定底座包（缺失即失败）
 #
-# 规则：只放"丢了就等于白刷"的包。功能页、可选工具不要放这里，
-#       否则升级版本时容易误报。
+# 这里只放「跟开关无关、丢了就等于白刷」的包。
+# 由 configs/features.md 启用行带进来的功能包，构建时由
+#   scripts/gen-config.sh --list-required
+# 自动派生，check-packages.sh --features 合并进同一份点名册。
+# 所以：改开关只改 features.md 一处，不要再往本文件里加/删功能包。
+#
 # 匹配：manifest 按包名精确匹配；.config 按 CONFIG_PACKAGE_<name>=y|m
 #       或 CONFIG_TARGET_DEVICE_PACKAGES_* 里的追加项匹配。
 # 维护：FanchmWrt 版本线变更（24.10 → 25.12 → 26.11）时同步核对一遍。
@@ -32,35 +36,3 @@ ipq-wifi-jdcloud_re-cs-02
 ath11k-firmware-qcn9074
 kmod-ath11k-pci
 kmod-ath11k-ahb
-
-# ── 个人定制 ──
-luci-app-athena-led
-athena-custom
-luci-app-dhcp-comment
-sysupgrade-clash-cleaner
-luci-app-cf-ipcheck
-
-# ── 随 features.md 启用的可选插件（与旧仓 openwrt-ci-roc 对齐）──
-# 关掉某个开关时，把对应行一起删掉，否则会一直报缺失。
-luci-app-openclash
-lucky
-luci-app-lucky
-smartdns
-luci-app-smartdns
-mosdns
-luci-app-mosdns
-# 地理数据：feeds/packages/net/v2ray-geodata 的 Makefile 只定义 template，
-# 真正可安装的是下面两个（luci-app-mosdns 的 LUCI_DEPENDS 也这么写）。
-# 旧写法 v2ray-geodata 不生成 CONFIG_PACKAGE_* 符号，会被 defconfig 丢掉。
-v2ray-geoip
-v2ray-geosite
-luci-app-airconnect
-airconnect
-luci-app-wechatpush
-luci-app-quickfile
-
-# ── 基础功能（features.md 的 upnp / watchcat / logrotate）──
-luci-app-upnp
-luci-app-watchcat
-watchcat
-logrotate

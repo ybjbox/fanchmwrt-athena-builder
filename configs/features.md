@@ -1,6 +1,7 @@
 # features.md — 单线构建的唯一开关表
 
 改需求只改这里：把某行的 `启用` 从 `0` 改成 `1`，`gen-config.sh` 生成 `.config`、`diy.sh` 拉源码，两边同时生效。
+「点名册」（编译前后两道包校验用的必需包清单）也由本表的启用行自动派生，**不需要再手动改第二份清单**：关掉某行，清单自动少几行。
 本文件既是脚本的数据源，也是 GitHub 上可直接阅读的表格——没有第二份需要同步的文档。
 
 当前的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置），九个可选插件里启用 7 个：`bandix` 与 `theme_aurora` 关闭——前者与 `fwx` 自带的流量统计重复，后者对 `fwx` 页面没有收益。要再减，把某一行的 `启用` 改回 `0` 即可。
@@ -20,10 +21,13 @@
 
 | 写法 | 作用 |
 |---|---|
-| `git:<url>` | 克隆到 `package/<仓库名末段>` |
+| `git:<url>` | 整仓浅克隆到 `package/<仓库名末段>` |
+| `gitdir:<url>#<分支>/<子目录>` | **只取大仓里的一个子目录**（稀疏检出，不整仓拉）；`diy.sh` 会把它放进 `package/<子目录名>` 并改写 Makefile 的 `luci.mk` 引用 |
 | `feed:<名>=<url>` | 追加 `src-git <名> <url>` 到 `feeds.conf.default` |
 | `feed:<名>` | 引用其他行已声明的 feed URL |
 | 留空 | 用 FanchmWrt 自带 feeds |
+
+`gitdir:` 用来搬别的发行版里的单个 LuCI 应用。整仓拉会带进几百个同名包、把软件源搞乱，所以只取那一个文件夹。
 
 解析规则：
 
@@ -31,6 +35,7 @@
 - `##` 标题、普通段落、其他列数的表格一律忽略（上面两张说明表就是靠这条被跳过的）
 - 每行必须 6 列，少写或多写分隔符会直接报错并指到行号
 - 单元格内如必须出现竖线，写成 `\|`
+- `gitdir:` 的子目录必须是仓库内相对路径，不能是绝对路径或含 `..`
 
 ## 核心：不可关
 
@@ -69,5 +74,6 @@
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
 |---|---|---|---|---|---|
 | upnp | 1 | 0 | luci-app-upnp | | 端口自动映射（BT / PS / Xbox）。安全面：等于允许局域网设备自行开洞，与行为管理方向相反 |
-| watchcat | 1 | 0 | luci-app-watchcat watchcat | | 定时 ping，连续失败 N 次自动重启，治"断网后卡死"。定时重启另由 uci-defaults 的 cron 实现——官方 feed 无 luci-app-autoreboot |
+| watchcat | 1 | 0 | luci-app-watchcat watchcat | | 定时 ping，连续失败 N 次自动重启，治"断网后卡死"（异常自愈，与下面的计划重启互不冲突） |
 | logrotate | 1 | 0 | logrotate | | 日志轮转，防 /var/log 写满。wechatpush、fwx 都会写日志 |
+| autoreboot | 1 | 0 | luci-app-autoreboot | gitdir:https://github.com/immortalwrt/luci#master/applications/luci-app-autoreboot | 网页「系统 → 定时重启」。只取 ImmortalWrt 大仓里这一个目录，不整仓拉；插件默认关闭、不预置时间，改时间不用重编固件 |

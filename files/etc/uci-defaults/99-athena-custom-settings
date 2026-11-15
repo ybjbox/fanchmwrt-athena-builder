@@ -97,22 +97,10 @@ if valid "$ADMIN_PASS"; then
   printf '%s\n%s\n' "$ADMIN_PASS" "$ADMIN_PASS" | passwd root 2>/dev/null || true
 fi
 
-# ── 8. 定时重启（cron 实现，不用 luci-app-autoreboot）──
-# 该包不在 openwrt/luci 官方 feed，immortalwrt/luci 与 coolsnowwolf/luci 也已移除，
-# GitHub 上的独立仓均为 2017–2024 的停更 Lua CBI 项目。定时重启本质就是一条 cron，
-# 用 cron 实现零依赖、零界面风险。默认每周日 04:00；改 REBOOT_CRON 或删掉本段即取消。
-REBOOT_CRON="0 4 * * 0"
-if [ -n "$REBOOT_CRON" ]; then
-  touch /etc/crontabs/root 2>/dev/null || true
-  if ! grep -q '^# athena-autoreboot' /etc/crontabs/root 2>/dev/null; then
-    {
-      printf '# athena-autoreboot: 定时重启（删掉下面两行即取消）\n'
-      printf '%s reboot\n' "$REBOOT_CRON"
-    } >> /etc/crontabs/root
-  fi
-  /etc/init.d/cron enable >/dev/null 2>&1 || true
-  /etc/init.d/cron restart >/dev/null 2>&1 || true
-fi
+# ── 8. 定时重启：不做任何预置 ──
+# 改由 ImmortalWrt 的 luci-app-autoreboot 提供（features.md 的 autoreboot 行）。
+# 插件默认 enabled=0，刷完不会自动重启；要启用请到网页「系统 → 定时重启」
+# 自己开、自己设时间。这里刻意不写 /etc/crontabs/root，避免两套计划重复重启。
 
 uci commit network
 uci commit dhcp
