@@ -201,13 +201,14 @@ jobs:
       - name: 校验 manifest
         run: |
           set -Eeuo pipefail
+          # 产物必须是雅典娜的。注意多设备模式（MULTI_PROFILE）下 manifest
+          # 是 target 级通用名（不带设备名），设备判断要看镜像文件名。
+          IMG="$(find openwrt/bin/targets -type f -name '*jdcloud_re-cs-02*' | head -1)"
+          [ -n "$IMG" ] || { echo "::error::产物中没有雅典娜镜像"; find openwrt/bin/targets -type f | head; exit 1; }
+          echo "[设备护栏] 雅典娜产物存在：$IMG"
+          ls -lh openwrt/bin/targets/qualcommax/ipq60xx/
           M="$(find openwrt/bin/targets -name '*.manifest' -print -quit)"
           [ -n "$M" ] || { echo "找不到 manifest"; exit 1; }
-          # 产物必须是雅典娜的（防设备漂移复发）
-          case "$M" in
-            *jdcloud_re-cs-02*) echo "[设备护栏] 产物 = 雅典娜（$M）" ;;
-            *) echo "::error::产物不是雅典娜设备：$M"; find openwrt/bin/targets -type f | head; exit 1 ;;
-          esac
           bash scripts/check-packages.sh --manifest "$M" --features configs/features.md --strict
 
       - name: 上传构建产物
