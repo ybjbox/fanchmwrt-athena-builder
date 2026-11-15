@@ -32,7 +32,7 @@ scripts/diy.sh                       全部定制（加 feed + clone 两个包�
 scripts/check-packages.sh            包校验
 scripts/gen-lock.sh / verify-lock.sh 版本锁
 scripts/hash-artifacts.sh            SHA256SUMS / BOM / build-info.json
-tests/                               75 条回归断言（12 包校验 + 22 版本锁 + 41 开关）
+tests/                               76 条回归断言（12 包校验 + 22 版本锁 + 42 开关）
 ```
 
 ---

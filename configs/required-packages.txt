@@ -21,6 +21,10 @@ luci-app-fwx-user
 luci-app-fwx-resources
 luci-app-fwx-system
 
+# ── 应用中心底座：luci-app-fwx-app-center 的 Makefile 声明 +luci-compat ──
+# 由 Kconfig select 自动带入；列在这里是防 make defconfig 静默剔除（同 iStore tar 丢包坑）
+luci-compat
+
 # ── 无线底座：DTS 正确但包被裁掉，照样没 WiFi ──
 ipq-wifi-jdcloud_re-cs-02
 ath11k-firmware-qcn9074
@@ -47,7 +51,7 @@ v2ray-geodata
 luci-app-airconnect
 airconnect
 luci-app-wechatpush
-luci-app-luci-app-quickfile
+luci-app-quickfile
 
 # ── 基础功能（features.md 的 upnp / watchcat / logrotate）──
 luci-app-upnp
