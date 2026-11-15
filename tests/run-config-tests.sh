@@ -37,11 +37,11 @@ expect_line() { # desc exact-line：用于清单类输出，避免子串误判
 echo "== C1 当前基线（旧仓同款，去掉 bandix 与主题）=="
 run "$GEN" --features "$FEATURES"
 expect_code "生成成功" 0
-expect_has "输出目标设备" "CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y"
-expect_has "设备附加包含 athena-led" 'CONFIG_TARGET_DEVICE_PACKAGES_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02="luci-app-athena-led luci-i18n-athena-led-zh-cn"'
+expect_not "片段不含目标行（目标选择由流水线基线负责，重复写入会重置设备）" "CONFIG_TARGET_qualcommax=y"
 expect_has "无线 board file 显式选中" "CONFIG_PACKAGE_ipq-wifi-jdcloud_re-cs-02=y"
 expect_has "QCN9074 固件显式选中" "CONFIG_PACKAGE_ath11k-firmware-qcn9074=y"
 expect_has "ath11k PCI 驱动显式选中" "CONFIG_PACKAGE_kmod-ath11k-pci=y"
+expect_has "点阵屏驱动普通直选" "CONFIG_PACKAGE_luci-app-athena-led=y"
 expect_has "个人包在" "CONFIG_PACKAGE_athena-custom=y"
 expect_has "工具在" "CONFIG_PACKAGE_htop=y"
 expect_has "zram 内核选项在" "CONFIG_KERNEL_ZRAM_BACKEND_LZ4=y"

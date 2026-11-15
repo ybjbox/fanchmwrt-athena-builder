@@ -126,11 +126,13 @@ matches_any() {
   return 1
 }
 
-# .config 中该包是否被选中（y 或 m），或出现在 DEVICE_PACKAGES 覆盖里
+# .config 中该包是否被选中。
+# 只认 =y：=m 是"编译成模块、不装进固件"，对固件来说等于缺席——
+# 上次云构建 ipq-wifi-jdcloud_re-cs-02=m 曾骗过校验，就是这里放的水。
+# 设备附加包覆盖（DEVICE_PACKAGES）里的名字也算在场。
 config_enabled() {
   local name="$1"
   grep -qxF "CONFIG_PACKAGE_${name}=y" "$CONFIG_FILE" && return 0
-  grep -qxF "CONFIG_PACKAGE_${name}=m" "$CONFIG_FILE" && return 0
   if [ -n "${DEVICE_PKGS_TOKENS:-}" ]; then
     # shellcheck disable=SC2086
     case " $DEVICE_PKGS_TOKENS " in *" $name "*) return 0 ;; esac

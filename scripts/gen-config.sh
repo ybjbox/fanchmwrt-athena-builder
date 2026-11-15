@@ -215,9 +215,10 @@ esac
 # ---------- 生成 .config 片段 ----------
 emit() {
   printf '# 由 gen-config.sh 从 features.md 生成 — 不要手改\n'
-  printf 'CONFIG_TARGET_qualcommax=y\n'
-  printf 'CONFIG_TARGET_qualcommax_ipq60xx=y\n'
-  printf 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y\n'
+  printf '# 注意：本片段不含目标设备选择行（CONFIG_TARGET_* 那三行）。\n'
+  printf '# 它们由流水线基线一次性写入；片段里再写一遍，第二次展开会报\n'
+  printf '# "override: ... changes choice state"，把已选好的设备重置丢失，\n'
+  printf '# 导致整台设备静默漂移成别的型号（2026-11 云构建实际发生过）。\n'
   # 官方 DEVICE_PACKAGES 由 include/image.mk 追加进镜像，不生成 CONFIG_PACKAGE_* 符号，
   # 因此编译前的 .config 校验看不见它们。这里显式选中同一组包：既保证 make 真编译
   # 无线底座，也让 required-packages.txt 的编译前校验有据可查（26.11 target 定义核对过）。

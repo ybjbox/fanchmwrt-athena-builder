@@ -1,0 +1,71 @@
+name: Check Config (快速验证)
+
+# 只验证「设备选择 + 包清单」，不编译（约 10 分钟）。
+# 用途：改完 features.md / gen-config.sh / 基线后，先跑这个确认
+# 设备没有静默漂移、点名册能对上，再触发完整 build（3 小时）。
+
+on:
+  workflow_dispatch:
+
+env:
+  SOURCE_REPO: https://github.com/fanchmwrt/fanchmwrt-snapshot.git
+  SOURCE_REF: fanchmwrt-26.11
+
+concurrency:
+  group: athena-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: 设备选择与包清单验证
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出构建配置
+        uses: actions/checkout@v4
+
+      - name: 安装编译依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk \
+            gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
+            python3-distutils rsync unzip zlib1g-dev file wget
+
+      - name: 拉取源码
+        run: git clone --depth=1 --branch "$SOURCE_REF" "$SOURCE_REPO" openwrt
+
+      - name: 应用定制（feed + 源码 + 单目录）
+        run: bash scripts/diy.sh openwrt
+
+      - name: 更新 feeds
+        working-directory: openwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 生成 .config 并断言设备
+        working-directory: openwrt
+        run: |
+          set -Eeuo pipefail
+          {
+            echo 'CONFIG_TARGET_qualcommax=y'
+            echo 'CONFIG_TARGET_qualcommax_ipq60xx=y'
+            echo 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y'
+          } > .config
+          make defconfig
+          bash ../scripts/gen-config.sh --features ../configs/features.md --out .config.fragment
+          cat .config.fragment >> .config
+          make defconfig
+          echo "---- 关键符号取证 ----"
+          grep -E '^CONFIG_(PACKAGE_(ipq-wifi|ath11k|kmod-ath11k|v2ray|luci-app-autoreboot)|TARGET_DEVICE_)' .config || true
+          # ---- 设备护栏：必须编的是雅典娜 ----
+          grep -qx 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y' .config \
+            || { echo "::error::雅典娜设备符号丢失，defconfig 选中了别的设备"; grep -E '^CONFIG_TARGET_DEVICE_' .config || true; exit 1; }
+          if grep -qE '^CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_8devices' .config; then
+            echo "::error::检测到 8devices 设备被选中，目标已漂移"; grep -E '^CONFIG_TARGET_DEVICE_' .config || true; exit 1
+          fi
+          echo "[设备护栏] 目标 = 雅典娜（jdcloud_re-cs-02），确认无误"
+
+      - name: 校验 required 包（编译前）
+        run: bash scripts/check-packages.sh --config openwrt/.config --features configs/features.md

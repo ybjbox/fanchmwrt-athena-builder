@@ -24,7 +24,8 @@
 ## 目录结构
 
 ```
-.github/workflows/build.yml          单条流水线（18 步）
+.github/workflows/build.yml          完整构建流水线（19 步，约 3 小时）
+.github/workflows/check-config.yml   快速验证（约 10 分钟）：只验证设备选择与包清单，不编译
 configs/features.md                  唯一开关表：编哪些包 + 拉哪些源 + 自动派生点名册
 scripts/gen-config.sh                由 features.md 生成 .config 片段 / clone / gitdir / required 清单
 configs/required-packages.txt        16 个固定底座包（其余由开关表自动派生，不要手改）
@@ -225,6 +226,7 @@ scripts/SDK-script.sh
 
 | 现象 | 先查 |
 |---|---|
+| 「雅典娜设备符号丢失」/「产物不是雅典娜设备」 | 设备护栏当场拦截了目标漂移（上次曾静默编成 8devices 开发板、白等 3 小时）。先跑 `check-config` 快速验证确认设备选择恢复，再触发完整构建 |
 | 编译日志看起来"卡住不动" | 已改为实时滚动（默认摘要模式，每个包一两行）。个别包（工具链、内核、OpenClash 这类大件）单包编译十几分钟属正常；把鼠标悬停在日志行首可以看到每行的时间戳 |
 | 编译失败想看真实报错 | 流水线会自动用单线程 `V=s` 重跑到出错点，尾部日志存进 `build-log-tail.txt` artifact；「编译」步骤里的红色 `error` 行就是根因 |
 | 编译前报「缺少必需包」 | 看日志点名的是固定底座还是**开关表派生项**：派生项多半是包名笔误或对应 feed 没拉到，被 `make defconfig` 静默丢弃；对照 `features.md` 那一行的包列表 |

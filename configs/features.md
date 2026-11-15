@@ -28,7 +28,7 @@
 |---|---|
 | 名称 | 给自己看的标签，只在报错时帮你定位是哪一行 |
 | 启用 | `1` = 要；`0` = 不要（包不装、源码不取） |
-| 设备附加包 | 旧机制留下的列，**现在用不到，保持 0**。它只在「一台编译机编很多型号、各装各的包」时才有用；本仓库只为雅典娜一台设备服务，用不上 |
+| 设备附加包 | 旧机制留下的列，**已停用，保持 0**。它只在「一台编译机编很多型号、各装各的包」时才有用；本仓库只为雅典娜一台设备服务，所有包直接装进固件，这列永远是 0 |
 | 包列表 | 要装的东西，空格隔开，一行可以写多个 |
 | 来源 | 东西从哪来，写法见下表；不填 = 用系统自带的软件源 |
 | 说明 | 中文备注，随便写，不影响运行 |
@@ -58,7 +58,7 @@
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
 |---|---|---|---|---|---|
 | athena_target | 1 | 0 | | | 占位行：设备型号写死在流水线里，这行只是提醒别删 |
-| athena_led | 1 | 1 | luci-app-athena-led luci-i18n-athena-led-zh-cn | git:https://github.com/NONGFAH/luci-app-athena-led | 点阵屏小屏驱动 |
+| athena_led | 1 | 0 | luci-app-athena-led luci-i18n-athena-led-zh-cn | git:https://github.com/NONGFAH/luci-app-athena-led | 点阵屏小屏驱动（普通直选，随固件安装） |
 | athena_custom | 1 | 0 | athena-custom | feed:ybjbox=https://github.com/ybjbox/openwrt-packages.git | 开机自动设置：宽带拨号 / WiFi / 管理地址 / 关 IPv6 |
 | dhcp_comment | 1 | 0 | luci-app-dhcp-comment | feed:ybjbox | 给局域网设备起备注名 |
 | clash_cleaner | 1 | 0 | sysupgrade-clash-cleaner | feed:ybjbox | 升级后清理 Clash 残留 |
