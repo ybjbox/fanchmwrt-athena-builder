@@ -68,7 +68,7 @@
 
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
 |---|---|---|---|---|---|
-| tools_base | 1 | 0 | tmux htop nano-full fdisk cfdisk sgdisk tune2fs fstrim openssh-sftp-server zoneinfo-asia coremark automount | | 命令行与磁盘工具 |
+| tools_base | 1 | 0 | tmux htop nano-full fdisk cfdisk sgdisk tune2fs fstrim openssh-sftp-server zoneinfo-asia coremark | | 命令行与磁盘工具（automount 系统默认已带，不用点名） |
 | zram | 1 | 0 | zram-swap | | 内存压缩（细节写死在脚本里，不用管） |
 
 ## 可选插件：每开一个都是独立构建风险点（旧仓同款，但关掉 bandix 与第三方主题）
