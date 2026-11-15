@@ -117,6 +117,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           {
+            echo 'CONFIG_TARGET_MULTI_PROFILE=y'
             echo 'CONFIG_TARGET_qualcommax=y'
             echo 'CONFIG_TARGET_qualcommax_ipq60xx=y'
             echo 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y'

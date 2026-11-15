@@ -49,15 +49,18 @@ jobs:
         run: |
           set -Eeuo pipefail
           {
+            echo 'CONFIG_TARGET_MULTI_PROFILE=y'
             echo 'CONFIG_TARGET_qualcommax=y'
             echo 'CONFIG_TARGET_qualcommax_ipq60xx=y'
             echo 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y'
           } > .config
           make defconfig
+          echo "---- 第一次展开后取证 ----"
+          grep -E '^CONFIG_TARGET_DEVICE_' .config || echo "(第一次展开后无设备符号)"
           bash ../scripts/gen-config.sh --features ../configs/features.md --out .config.fragment
           cat .config.fragment >> .config
           make defconfig
-          echo "---- 关键符号取证 ----"
+          echo "---- 第二次展开后取证 ----"
           grep -E '^CONFIG_(PACKAGE_(ipq-wifi|ath11k|kmod-ath11k|v2ray|luci-app-autoreboot)|TARGET_DEVICE_)' .config || true
           # ---- 设备护栏：必须编的是雅典娜 ----
           grep -qx 'CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y' .config \

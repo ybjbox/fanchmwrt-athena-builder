@@ -169,7 +169,7 @@ git clone --depth=1 -b fanchmwrt-26.11 https://github.com/fanchmwrt/fanchmwrt-sn
 ./scripts/diy.sh openwrt
 cd openwrt && ./scripts/feeds update -a && ./scripts/feeds install -a && cd ..
 
-printf 'CONFIG_TARGET_qualcommax=y\nCONFIG_TARGET_qualcommax_ipq60xx=y\nCONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y\n' > openwrt/.config
+printf 'CONFIG_TARGET_MULTI_PROFILE=y\nCONFIG_TARGET_qualcommax=y\nCONFIG_TARGET_qualcommax_ipq60xx=y\nCONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y\n' > openwrt/.config
 (cd openwrt && make defconfig)
 ./scripts/gen-config.sh --features configs/features.md --out openwrt/.config.fragment
 cat openwrt/.config.fragment >> openwrt/.config
@@ -226,7 +226,7 @@ scripts/SDK-script.sh
 
 | 现象 | 先查 |
 |---|---|
-| 「雅典娜设备符号丢失」/「产物不是雅典娜设备」 | 设备护栏当场拦截了目标漂移（上次曾静默编成 8devices 开发板、白等 3 小时）。先跑 `check-config` 快速验证确认设备选择恢复，再触发完整构建 |
+| 「雅典娜设备符号丢失」/「产物不是雅典娜设备」 | 设备护栏当场拦截了目标漂移（曾静默编成 8devices 开发板、白等 3 小时）。根因：设备选择默认是"单选一个默认设备"，恰好指向字母序第一的 8devices，必须开多设备模式并显式选雅典娜——基线 4 行（含 `CONFIG_TARGET_MULTI_PROFILE=y`）缺一不可；改完跑 `check-config` 快速验证（10 分钟）再触发完整构建 |
 | 编译日志看起来"卡住不动" | 已改为实时滚动（默认摘要模式，每个包一两行）。个别包（工具链、内核、OpenClash 这类大件）单包编译十几分钟属正常；把鼠标悬停在日志行首可以看到每行的时间戳 |
 | 编译失败想看真实报错 | 流水线会自动用单线程 `V=s` 重跑到出错点，尾部日志存进 `build-log-tail.txt` artifact；「编译」步骤里的红色 `error` 行就是根因 |
 | 编译前报「缺少必需包」 | 看日志点名的是固定底座还是**开关表派生项**：派生项多半是包名笔误或对应 feed 没拉到，被 `make defconfig` 静默丢弃；对照 `features.md` 那一行的包列表 |
