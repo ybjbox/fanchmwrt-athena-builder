@@ -38,8 +38,42 @@ env:
   CCACHE_MAXSIZE: 5G
 
 jobs:
+  # 仅定时触发时运行：上游 commit 没变就跳过整次构建，省掉无意义的 1.5–2.5 小时。
+  # 手动触发 / 打 tag 不经过这里（你想编就编）。
+  gate:
+    name: 上游变更检查（仅定时触发）
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: 比对上游 commit 与上次定时构建
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -Eeuo pipefail
+          CUR="$(git ls-remote "$SOURCE_REPO" "refs/heads/$SOURCE_REF" | cut -c1-12)"
+          [ -n "$CUR" ] || { echo "::error::解析上游 $SOURCE_REF 失败"; exit 1; }
+          # 上次定时构建的上游 commit 记在 Release 说明第一行（upstream-commit:）
+          LAST="$(gh release list --limit 30 --json tagName,body \
+            --jq '[.[] | select(.tagName | startswith("athena-"))][0].body' 2>/dev/null \
+            | sed -n 's/^upstream-commit: *\([0-9a-f]\{7,40\}\).*/\1/p' | head -1 || true)"
+          echo "当前上游 $SOURCE_REF = $CUR"
+          echo "上次定时构建的上游     = ${LAST:-（无记录，按有变化处理）}"
+          if [ -n "$LAST" ] && [ "$LAST" = "$CUR" ]; then
+            echo "上游无变化，跳过本次构建"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Athena / ${{ github.event_name }}
+    needs: gate
+    # gate 在非定时触发时是 skipped，用 always() 保证手动 / tag 构建照常进行
+    if: always() && needs.gate.outputs.skip != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 360
 
@@ -289,16 +323,31 @@ jobs:
           retention-days: 7
 
       - name: 发布 Release
-        if: startsWith(github.ref, 'refs/tags/') || inputs.create_release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.create_release || github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
         run: |
           set -Eeuo pipefail
           TAG="${{ github.ref_name }}"
           case "$TAG" in
             v*) ;;
-            *) TAG="athena-$(date -u +%Y%m%d-%H%M)" ;;
+            *) TAG="athena-$(TZ='Asia/Shanghai' date +%Y%m%d-%H%M)" ;;
           esac
-          gh release create "$TAG" dist/firmware/* dist/SHA256SUMS dist/BOM.txt dist/build-info.json \
+          # 说明第一行记录上游 commit：下次定时构建据此判断上游有没有变化
+          {
+            echo "upstream-commit: ${UPSTREAM_SHA}"
+            echo "upstream-ref: ${SOURCE_REF}"
+            echo "built-at: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S %Z')"
+            echo "trigger: ${{ github.event_name }}"
+            echo
+            cat dist/BOM.txt
+          } > dist/release-notes.txt
+          # 定时构建标为预发布且不抢 latest（snapshot 线本就非稳定版；正式版仍靠 v* tag）
+          EXTRA=""
+          if [ "${{ github.event_name }}" = "schedule" ]; then EXTRA="--prerelease --latest=false"; fi
+          # shellcheck disable=SC2086
+          gh release create "$TAG" \
+            dist/firmware/* dist/SHA256SUMS dist/BOM.txt dist/build-info.json \
             --title "FanchmWrt Athena ${TAG}" \
-            --notes-file dist/BOM.txt
+            --notes-file dist/release-notes.txt $EXTRA

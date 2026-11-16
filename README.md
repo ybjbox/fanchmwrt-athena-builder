@@ -59,9 +59,16 @@ tests/                               109 条回归断言（18 包校验 + 22 版
 3. **触发构建**（三种方式）：
    - **手动**：Actions → Build FanchmWrt Athena → Run workflow
    - **定时**：每周五 03:30（北京时间）自动跑一次。GitHub cron 按 **UTC** 解释，表达式写 `30 19 * * 4`（= 周四 19:30 UTC）；改时间记得减 8 小时。实际开跑可能延迟几分钟到几十分钟
-   - **打 tag**：推送 `v*` tag 时自动构建，并按 tag 创建 Release
+   - **打 tag**：推送 `v*` tag 时自动构建，并以该 tag 发布正式 Release（不加 Pre-release 标记）
 
-   定时任务单独占用一个并发组且不参与取消，**不会掐掉你正在手动跑的构建**；手动构建之间仍互相取消（连点两次只跑最新那次）。定时构建同样只出 Artifact（保留 7 天），不自动建 Release。
+   定时任务有两条特别规则：
+
+   - **上游没变就不编**：先比对 fanchmwrt 分支当前 commit 与上次构建记录（写在 Release 说明第一行 `upstream-commit:`），相同则整次跳过，省掉 1.5–2.5 小时
+   - **编完自动发 Release**：命名 `athena-<北京时间戳>`（如 `athena-20261120-0331`），标为 Pre-release、不抢 `latest`；正式版本仍由 `v*` tag 发布
+
+   定时任务单独占用一个并发组且不参与取消，**不会掐掉你正在手动跑的构建**；手动构建之间仍互相取消（连点两次只跑最新那次）。
+
+   > 定时 Release 会累积：每个约 180MB（3 个固件 + 校验/BOM），每周一次一年约 9GB。想控体积可在 Releases 页手动删旧的，或把「发布 Release」步骤的附件改成只传 `factory.bin` + `sysupgrade.bin`。
 4. **取产物**：Artifacts 里的 `dist/`，含固件、`SHA256SUMS`、`BOM.txt`、`build-info.json`。
 5. **刷机**：不死 uboot 刷 `factory.bin`，之后系统内升 `sysupgrade.bin`；**用 1.0.5 起必须不保留配置**。
 
