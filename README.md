@@ -24,7 +24,7 @@
 ## 目录结构
 
 ```
-.github/workflows/build.yml          完整构建流水线（19 步，约 3 小时）
+.github/workflows/build.yml          完整构建流水线（24 步，约 2.5 小时；二次构建约 1.5 小时）
 .github/workflows/check-config.yml   快速验证（约 10 分钟）：只验证设备选择与包清单，不编译
 configs/features.md                  唯一开关表：编哪些包 + 拉哪些源 + 自动派生点名册
 scripts/gen-config.sh                由 features.md 生成 .config 片段 / clone / gitdir / required 清单
@@ -35,7 +35,7 @@ scripts/diy.sh                       全部定制（feed + clone + 稀疏取单�
 scripts/check-packages.sh            包校验（--features 合并自动派生的点名册）
 scripts/gen-lock.sh / verify-lock.sh 版本锁
 scripts/hash-artifacts.sh            SHA256SUMS / BOM / build-info.json
-tests/                               108 条回归断言（18 包校验 + 22 版本锁 + 68 开关）
+tests/                               109 条回归断言（18 包校验 + 22 版本锁 + 69 开关）
 ```
 
 ---
@@ -161,6 +161,26 @@ FanchmWrt 用的是官方 `openwrt/luci`（104 个应用），不带这个应用
 - 界面语言：插件自带 `po/zh_Hans`，`CONFIG_LUCI_LANG_zh_Hans=y` 时由官方 `luci.mk` 生成中文语言包
 - 与 `watchcat` 的分工：`watchcat` 管「断网后卡死」的异常自愈，`autoreboot` 管「计划性定期重启」，互不冲突
 - 退路：若首次构建实测该页面打不开，可刷机后在「系统 → 软件包」手动装 ImmortalWrt 官方 ipk，不必重编固件（但每次刷机要重装一次）
+
+## 编译加速（三层缓存）
+
+完整构建约 2.5 小时，**编译占 98%**（实测 2h21m / 2h24m），其余步骤合计不到 3 分钟。因此缓存全部打在编译链上：
+
+| 缓存 | 缓存内容 | 失效条件 | 预计收益（第二次起） |
+|---|---|---|---|
+| `dl` | 源码包下载目录 `openwrt/dl` | `features.md` 变化 | 省掉重复下载（已生效） |
+| `ccache` | `~/.ccache`（压缩、5G 上限） | `features.md` 变化；`restore-keys` 会兜底复用旧缓存 | **30–60 分钟** |
+| 工具链 | `build_dir/host`、`build_dir/toolchain-*`、`staging_dir/host`、`staging_dir/toolchain-*` | 上游 commit 或 `features.md` 变化 | **20–30 分钟** |
+
+设计要点：
+
+- **只复用编译产物，不改固件内容**：缓存失效最坏退化为全量编译，不会产出错误固件。
+- **工具链缓存的 key 带上游 commit**（`git ls-remote` 解析前 12 位）：上游一更新自动失效，避免新旧源码混用。
+- **只在构建成功时保存**（`if: success()`）：失败不会把半成品写进缓存。
+- 仓库缓存上限 10GB，超出时 GitHub 按最久未用自动淘汰；`dl` + `ccache` + 工具链合计约 5–8GB。
+- 本地构建同样受益：先 `sudo apt install ccache`（片段里已默认带 `CONFIG_CCACHE=y`）。
+
+预期：首次构建（填充缓存）约 2.5 小时，之后稳定在 **1.5 小时左右**。日志里会打印编译前后的 `ccache -s` 统计，可据此判断命中率。
 
 ## 本地复现
 

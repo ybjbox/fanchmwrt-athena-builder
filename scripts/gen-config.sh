@@ -232,6 +232,9 @@ emit() {
     printf 'CONFIG_TARGET_DEVICE_PACKAGES_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02="%s"\n' "$dev_sorted"
   fi
   printf 'CONFIG_LUCI_LANG_zh_Hans=y\n'
+  # 编译加速：ccache 会跳过已编译过的相同目标。CI 上由 actions/cache 持久化，
+  # 本地构建需先装 ccache（apt install ccache），否则 make 会报找不到 ccache。
+  printf 'CONFIG_CCACHE=y\n'
 
   printf '# ---- 包 ----\n'
   if [ "${#PKGS[@]}" -gt 0 ]; then
