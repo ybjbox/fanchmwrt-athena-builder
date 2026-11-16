@@ -56,7 +56,12 @@ tests/                               109 条回归断言（18 包校验 + 22 版
 
    不填的项会保持占位符形态，`uci-defaults` 里的 `valid()` 会跳过它，不会把 SSID 写成 `__MY_*`。
 
-3. **手动触发**：Actions → Build FanchmWrt Athena → Run workflow。
+3. **触发构建**（三种方式）：
+   - **手动**：Actions → Build FanchmWrt Athena → Run workflow
+   - **定时**：每周五 03:30（北京时间）自动跑一次。GitHub cron 按 **UTC** 解释，表达式写 `30 19 * * 4`（= 周四 19:30 UTC）；改时间记得减 8 小时。实际开跑可能延迟几分钟到几十分钟
+   - **打 tag**：推送 `v*` tag 时自动构建，并按 tag 创建 Release
+
+   定时任务单独占用一个并发组且不参与取消，**不会掐掉你正在手动跑的构建**；手动构建之间仍互相取消（连点两次只跑最新那次）。定时构建同样只出 Artifact（保留 7 天），不自动建 Release。
 4. **取产物**：Artifacts 里的 `dist/`，含固件、`SHA256SUMS`、`BOM.txt`、`build-info.json`。
 5. **刷机**：不死 uboot 刷 `factory.bin`，之后系统内升 `sysupgrade.bin`；**用 1.0.5 起必须不保留配置**。
 
@@ -181,6 +186,8 @@ FanchmWrt 用的是官方 `openwrt/luci`（104 个应用），不带这个应用
 - 本地构建同样受益：先 `sudo apt install ccache`（片段里已默认带 `CONFIG_CCACHE=y`）。
 
 预期：首次构建（填充缓存）约 2.5 小时，之后稳定在 **1.5 小时左右**。日志里会打印编译前后的 `ccache -s` 统计，可据此判断命中率。
+
+定时每周跑一次还有个附带好处：缓存不会因长期不用而过期，每次都能享受缓存后的速度。
 
 ## 本地复现
 

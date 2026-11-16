@@ -1,6 +1,11 @@
 name: Build FanchmWrt Athena
 
 on:
+  schedule:
+    # 每周五 03:30 北京时间 = 每周四 19:30 UTC
+    # GitHub 的 cron 一律按 UTC 解释，改时间记得换算（北京时间 - 8 小时）。
+    # 定时任务实际开跑可能延迟几分钟到几十分钟（GitHub 官方说明，高峰期更明显）。
+    - cron: '30 19 * * 4'
   workflow_dispatch:
     inputs:
       source_ref:
@@ -16,8 +21,10 @@ on:
       - 'v*'
 
 concurrency:
-  group: athena-${{ github.ref }}
-  cancel-in-progress: true
+  # 定时任务单独成组且不取消任何在跑的构建——否则你手动触发的构建
+  # 会被到点的定时任务掐掉。手动构建之间仍互相取消（连续点只跑最新那次）。
+  group: athena-${{ github.event_name == 'schedule' && 'scheduled' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 permissions:
   contents: write
