@@ -6,8 +6,7 @@
 #   scripts/gen-release-notes.sh --dist dist --features configs/features.md \
 #     --manifest openwrt/bin/targets/.../xxx.manifest --lock versions.lock \
 #     --upstream 8f3a2b1c9d4e --upstream-ref fanchmwrt-26.11 --trigger schedule \
-#     --kernel 6.18.60 --rootfs openwrt/build_dir/.../root.squashfs \
-#     --out dist/release-notes.md
+#     --kernel 6.18.60 --out dist/release-notes.md
 #
 # 所有输入都是"能给就给"：缺哪个就省略对应段落，绝不因取不到数据而失败。
 # 文件末尾有一段「自动化读取区」（upstream-commit: 等），定时构建靠它判断上游是否变化，不要删。
@@ -15,7 +14,7 @@
 set -Eeuo pipefail
 
 DIST=""; FEATURES=""; MANIFEST=""; LOCK=""
-UPSTREAM=""; UPSTREAM_REF=""; TRIGGER=""; KERNEL=""; ROOTFS=""; OUT=""
+UPSTREAM=""; UPSTREAM_REF=""; TRIGGER=""; KERNEL=""; OUT=""
 
 die() { printf '[release-notes] ERROR: %s\n' "$*" >&2; exit 2; }
 
@@ -29,7 +28,6 @@ while [ $# -gt 0 ]; do
     --upstream-ref) [ $# -ge 2 ] || die "--upstream-ref 需要参数"; UPSTREAM_REF="$2"; shift 2 ;;
     --trigger)      [ $# -ge 2 ] || die "--trigger 需要参数";      TRIGGER="$2";      shift 2 ;;
     --kernel)       [ $# -ge 2 ] || die "--kernel 需要参数";       KERNEL="$2";       shift 2 ;;
-    --rootfs)       [ $# -ge 2 ] || die "--rootfs 需要参数";       ROOTFS="$2";       shift 2 ;;
     --out)          [ $# -ge 2 ] || die "--out 需要参数";          OUT="$2";          shift 2 ;;
     -h|--help) echo "用法: gen-release-notes.sh --dist <dir> --out <file.md> [其它可选参数]"; exit 0 ;;
     *) die "未知参数: $1" ;;
@@ -82,16 +80,6 @@ fi
 PKG_N=""
 if [ -f "$MANIFEST" ]; then
   PKG_N="$(awk 'NF>=1 && $1 !~ /^#/ {c++} END{print c+0}' "$MANIFEST")"
-fi
-
-# ── rootfs 体积与 60MB 分区余量 ──
-ROOTFS_MIB=""; FREE_MIB=""
-if [ -n "$ROOTFS" ] && [ -f "$ROOTFS" ]; then
-  B="$(stat -c '%s' "$ROOTFS" 2>/dev/null || stat -f '%z' "$ROOTFS" 2>/dev/null || echo "")"
-  if [ -n "$B" ]; then
-    ROOTFS_MIB="$(awk -v b="$B" 'BEGIN{printf "%.1f", b/1048576}')"
-    FREE_MIB="$(awk -v m="$ROOTFS_MIB" 'BEGIN{printf "%.1f", 60-m}')"
-  fi
 fi
 
 # ── 从 BOM 取追溯字段（没有就省略）──
@@ -160,14 +148,6 @@ mkdir -p "$(dirname "$OUT")"
     printf '| 文件 | 用途 | 大小 | SHA256 |\n|---|---|---|---|\n'
     printf '%s' "$ROWS"
     printf '\n'
-    printf -- '- **必须用「小分区 uboot」**：固件按原厂 60MB rootfs 分区打包'
-    if [ -n "$ROOTFS_MIB" ]; then
-      printf '，本版 rootfs 约 %s MB（60MB 分区余量约 %s MB）' "$ROOTFS_MIB" "$FREE_MIB"
-    fi
-    printf '。刷大分区 GPT 属官方未验证组合。\n'
-    printf -- '- 从 1.0.5 起升级**必须不保留配置**（升级时取消勾选“保留配置”）。\n'
-    printf -- '- 默认管理地址 `10.0.0.1`，用户名 `root`；密码由构建时的 `ADMIN_PASSWORD` 决定，未配置则为空。\n'
-    printf -- '- 定时重启不预置：需要时在「系统 → 定时重启」自行启用（插件已内置）。\n\n'
   fi
 
   if [ "$ON_N" -gt 0 ] || [ "$OFF_N" -gt 0 ]; then

@@ -343,7 +343,6 @@ jobs:
           # 生成给人看的说明（刷机要点 / 功能清单 / 校验 / 追溯）
           KERNEL="$(ls -d openwrt/build_dir/target-*/linux-qualcommax_ipq60xx/linux-* 2>/dev/null \
             | head -1 | sed 's#.*/linux-##' || true)"
-          ROOTFS="$(find openwrt/build_dir -name 'root.squashfs' -print -quit 2>/dev/null || true)"
           MANIFEST="$(find openwrt/bin/targets -name '*.manifest' -print -quit 2>/dev/null || true)"
           bash scripts/gen-release-notes.sh \
             --dist dist \
@@ -354,7 +353,6 @@ jobs:
             --upstream-ref "$SOURCE_REF" \
             --trigger "${{ github.event_name }}" \
             --kernel "$KERNEL" \
-            --rootfs "$ROOTFS" \
             --out dist/release-notes.md
           # 自动命名的版本（定时/手动）都是正式版，不标 Pre-release；
           # 只有 v* tag 抢 latest，athena-* 一律不抢，避免顶掉你手动发布的正式版

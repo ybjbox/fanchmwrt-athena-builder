@@ -72,7 +72,7 @@ tests/                               118 条回归断言（18 包校验 + 22 版
    > **固件会自动清理**：每次发布后只保留最近 4 个 `athena-*` 版本（约一个月、约 720MB），更早的连同 tag 一起删除。`v*` tag 的发布不以 `athena-` 开头，**永远不会被删**。想改保留数量，调 workflow 清理步骤里的 `KEEP`。
 4. **取产物**：Artifacts 里的 `dist/`，含固件、`SHA256SUMS`、`BOM.txt`、`build-info.json`。
 
-   发 Release 时，说明页会给出：每个固件的用途与 SHA256、必须用「小分区 uboot」的提示与本次 rootfs 余量、本次启用的功能清单、上游 commit 与配置哈希。说明由 `scripts/gen-release-notes.sh` 生成，任一项数据取不到就自动省略，不影响发布；末尾有一段「自动化读取区」（`upstream-commit:`），定时构建靠它判断上游是否变化，不要删。
+   发 Release 时，说明页会给出：每个固件的用途与 SHA256、本次启用的功能清单、构建追溯（上游 commit、配置哈希等）。说明由 `scripts/gen-release-notes.sh` 生成，任一项数据取不到就自动省略，不影响发布；末尾有一段「自动化读取区」（`upstream-commit:`），定时构建靠它判断上游是否变化，不要删。
 5. **刷机**：不死 uboot 刷 `factory.bin`，之后系统内升 `sysupgrade.bin`；**用 1.0.5 起必须不保留配置**。
 
 要发 Release：打 `v*` tag，或手动触发时勾选 `create_release`。
