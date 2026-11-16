@@ -350,9 +350,16 @@ jobs:
             --kernel "$KERNEL" \
             --rootfs "$ROOTFS" \
             --out dist/release-notes.md
-          # 定时构建标为预发布且不抢 latest（snapshot 线本就非稳定版；正式版仍靠 v* tag）
+          # 自动命名的版本（定时/手动）都不抢 latest，只有 v* tag 才是最新正式版；
+          # 定时版额外标 Pre-release，便于清理步骤只动它、不碰你手动发布的版本
           EXTRA=""
-          if [ "${{ github.event_name }}" = "schedule" ]; then EXTRA="--prerelease --latest=false"; fi
+          case "$TAG" in
+            v*) ;;
+            *)
+              EXTRA="--latest=false"
+              if [ "${{ github.event_name }}" = "schedule" ]; then EXTRA="$EXTRA --prerelease"; fi
+              ;;
+          esac
           # shellcheck disable=SC2086
           gh release create "$TAG" \
             dist/firmware/* dist/SHA256SUMS dist/BOM.txt dist/build-info.json \
