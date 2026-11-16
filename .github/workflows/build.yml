@@ -185,7 +185,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           # 首启脚本只由构建仓提供，直接写进 base-files overlay 随固件发布。
-          # 不再安装 athena-custom 包：features.md 的 athena_custom 行包列表已清空，
+          # 不再安装 athena-custom 包：features.md 里已经没有这一行，
           # 那个包自 2026-11 起只剩占位作用，且曾在 2026-11-16 让整轮编译失败。
           SRC=files/etc/uci-defaults/99-athena-custom-settings
           install -D -m 0755 "$SRC" \

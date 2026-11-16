@@ -55,11 +55,15 @@
 
 ## 核心：不可关
 
+> 首启脚本（宽带拨号 / WiFi 名称与密码 / 管理地址 / 关 IPv6 / 关硬件加速 / 换软件源）
+> **不在这张表里**：它由构建仓 `files/etc/uci-defaults/99-athena-custom-settings`
+> 直接写进 base-files overlay 随固件发布，编译时用 Secrets 填具体值。
+> 要改内容就改那个文件，不装任何包。
+
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
 |---|---|---|---|---|---|
 | athena_target | 1 | 0 | | | 占位行：设备型号写死在流水线里，这行只是提醒别删 |
 | athena_led | 1 | 0 | luci-app-athena-led luci-i18n-athena-led-zh-cn | git:https://github.com/NONGFAH/luci-app-athena-led | 点阵屏小屏驱动（普通直选，随固件安装） |
-| athena_custom | 1 | 0 | | | 开机自动设置（宽带拨号 / WiFi / 管理地址 / 关 IPv6）：首启脚本由构建仓直接写进 base-files，不装任何包 |
 | dhcp_comment | 1 | 0 | luci-app-dhcp-comment | feed:ybjbox=https://github.com/ybjbox/openwrt-packages.git | 给局域网设备起备注名 |
 | clash_cleaner | 1 | 0 | sysupgrade-clash-cleaner | feed:ybjbox | 升级后清理 Clash 残留 |
 | cf_ipcheck | 1 | 0 | luci-app-cf-ipcheck | feed:ybjbox | Cloudflare 优选 IP 实测 |
