@@ -215,6 +215,38 @@ run "$GEN" --features "$WORK/f17b.md" --check
 expect_code "子目录越界被拒" 2
 expect_has "报错要求仓库内相对路径" "仓库内相对路径"
 
+echo "== C18 Release 说明生成（刷机要点 / 功能清单 / 自动化读取区）=="
+RN="$KIT/scripts/gen-release-notes.sh"
+RT="$WORK/rn"; mkdir -p "$RT/dist/firmware"
+head -c 2048 /dev/zero > "$RT/dist/firmware/openwrt-x-jdcloud_re-cs-02-squashfs-factory.bin"
+head -c 2048 /dev/zero > "$RT/dist/firmware/openwrt-x-jdcloud_re-cs-02-squashfs-sysupgrade.bin"
+head -c 2048 /dev/zero > "$RT/dist/firmware/openwrt-x-jdcloud_re-cs-02-initramfs-uImage.itb"
+head -c 2048 /dev/zero > "$RT/root.squashfs"
+printf 'filler\n%.0s' $(seq 1 100) > "$RT/manifest"
+printf 'config_sha256=abc123\nlock_sha256=def456\nartifact_count=3\ntotal_bytes=6144\n' > "$RT/dist/BOM.txt"
+run "$RN" --dist "$RT/dist" --features "$FEATURES" --manifest "$RT/manifest" \
+  --upstream 8f3a2b1c9d4e --upstream-ref fanchmwrt-26.11 --trigger schedule \
+  --kernel 6.18.60 --rootfs "$RT/root.squashfs" --out "$RT/notes.md"
+expect_code "生成成功" 0
+OUT="$(cat "$RT/notes.md")"
+expect_has "含小分区 uboot 提示" "必须用「小分区 uboot」"
+expect_has "含 rootfs 余量" "60MB 分区余量约"
+expect_has "含启用功能清单" "启用 19 项"
+expect_has "含刷机用途说明" "首次刷机"
+expect_line "自动化读取区保留 upstream-commit（定时 gate 依赖）" "upstream-commit: 8f3a2b1c9d4e"
+NROWS=$(printf '%s\n' "$OUT" | grep -c '^| `openwrt-x')
+if [ "$NROWS" = "3" ]; then
+  printf '  PASS  产物表 3 行各自独立（未粘连）\n'; PASS=$((PASS+1))
+else
+  printf '  FAIL  产物表行数异常：%s\n' "$NROWS"; FAIL=$((FAIL+1))
+fi
+
+mkdir -p "$RT/empty/dist/firmware"
+run "$RN" --dist "$RT/empty/dist" --out "$RT/min.md"
+expect_code "缺可选参数也能生成" 0
+run "$RN" --dist "$RT/dist"
+expect_code "缺 --out 被拒" 2
+
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

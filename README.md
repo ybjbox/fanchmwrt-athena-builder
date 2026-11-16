@@ -35,7 +35,8 @@ scripts/diy.sh                       全部定制（feed + clone + 稀疏取单�
 scripts/check-packages.sh            包校验（--features 合并自动派生的点名册）
 scripts/gen-lock.sh / verify-lock.sh 版本锁
 scripts/hash-artifacts.sh            SHA256SUMS / BOM / build-info.json
-tests/                               109 条回归断言（18 包校验 + 22 版本锁 + 69 开关）
+scripts/gen-release-notes.sh         Release 说明（刷机要点 / 功能清单 / 校验 / 追溯）
+tests/                               118 条回归断言（18 包校验 + 22 版本锁 + 78 开关）
 ```
 
 ---
@@ -70,6 +71,8 @@ tests/                               109 条回归断言（18 包校验 + 22 版
 
    > **定时 Release 会自动清理**：每次发布后只保留最近 4 个（约一个月、约 720MB），更早的连同 tag 一起删除。筛选条件是「Pre-release + `athena-` 前缀」，因此 `v*` 正式版和手动发布（未标 Pre-release）的版本**永远不会被误删**。想改保留数量，调 workflow 清理步骤里的 `KEEP`。
 4. **取产物**：Artifacts 里的 `dist/`，含固件、`SHA256SUMS`、`BOM.txt`、`build-info.json`。
+
+   发 Release 时，说明页会给出：每个固件的用途与 SHA256、必须用「小分区 uboot」的提示与本次 rootfs 余量、本次启用的功能清单、上游 commit 与配置哈希。说明由 `scripts/gen-release-notes.sh` 生成，任一项数据取不到就自动省略，不影响发布；末尾有一段「自动化读取区」（`upstream-commit:`），定时构建靠它判断上游是否变化，不要删。
 5. **刷机**：不死 uboot 刷 `factory.bin`，之后系统内升 `sysupgrade.bin`；**用 1.0.5 起必须不保留配置**。
 
 要发 Release：打 `v*` tag，或手动触发时勾选 `create_release`。

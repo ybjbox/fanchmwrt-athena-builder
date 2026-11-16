@@ -334,15 +334,22 @@ jobs:
             v*) ;;
             *) TAG="athena-$(TZ='Asia/Shanghai' date +%Y%m%d-%H%M)" ;;
           esac
-          # 说明第一行记录上游 commit：下次定时构建据此判断上游有没有变化
-          {
-            echo "upstream-commit: ${UPSTREAM_SHA}"
-            echo "upstream-ref: ${SOURCE_REF}"
-            echo "built-at: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S %Z')"
-            echo "trigger: ${{ github.event_name }}"
-            echo
-            cat dist/BOM.txt
-          } > dist/release-notes.txt
+          # 生成给人看的说明（刷机要点 / 功能清单 / 校验 / 追溯）
+          KERNEL="$(ls -d openwrt/build_dir/target-*/linux-qualcommax_ipq60xx/linux-* 2>/dev/null \
+            | head -1 | sed 's#.*/linux-##' || true)"
+          ROOTFS="$(find openwrt/build_dir -name 'root.squashfs' -print -quit 2>/dev/null || true)"
+          MANIFEST="$(find openwrt/bin/targets -name '*.manifest' -print -quit 2>/dev/null || true)"
+          bash scripts/gen-release-notes.sh \
+            --dist dist \
+            --features configs/features.md \
+            --manifest "$MANIFEST" \
+            --lock versions.lock \
+            --upstream "$UPSTREAM_SHA" \
+            --upstream-ref "$SOURCE_REF" \
+            --trigger "${{ github.event_name }}" \
+            --kernel "$KERNEL" \
+            --rootfs "$ROOTFS" \
+            --out dist/release-notes.md
           # 定时构建标为预发布且不抢 latest（snapshot 线本就非稳定版；正式版仍靠 v* tag）
           EXTRA=""
           if [ "${{ github.event_name }}" = "schedule" ]; then EXTRA="--prerelease --latest=false"; fi
@@ -350,7 +357,7 @@ jobs:
           gh release create "$TAG" \
             dist/firmware/* dist/SHA256SUMS dist/BOM.txt dist/build-info.json \
             --title "FanchmWrt Athena ${TAG}" \
-            --notes-file dist/release-notes.txt $EXTRA
+            --notes-file dist/release-notes.md $EXTRA
 
       - name: 清理旧的定时 Release（只留最近 4 个）
         # 筛选条件：Pre-release + athena- 前缀 = 只有定时版本符合。
