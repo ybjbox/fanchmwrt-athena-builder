@@ -59,8 +59,8 @@
 |---|---|---|---|---|---|
 | athena_target | 1 | 0 | | | 占位行：设备型号写死在流水线里，这行只是提醒别删 |
 | athena_led | 1 | 0 | luci-app-athena-led luci-i18n-athena-led-zh-cn | git:https://github.com/NONGFAH/luci-app-athena-led | 点阵屏小屏驱动（普通直选，随固件安装） |
-| athena_custom | 1 | 0 | athena-custom | feed:ybjbox=https://github.com/ybjbox/openwrt-packages.git | 开机自动设置：宽带拨号 / WiFi / 管理地址 / 关 IPv6 |
-| dhcp_comment | 1 | 0 | luci-app-dhcp-comment | feed:ybjbox | 给局域网设备起备注名 |
+| athena_custom | 1 | 0 | | | 开机自动设置（宽带拨号 / WiFi / 管理地址 / 关 IPv6）：首启脚本由构建仓直接写进 base-files，不装任何包 |
+| dhcp_comment | 1 | 0 | luci-app-dhcp-comment | feed:ybjbox=https://github.com/ybjbox/openwrt-packages.git | 给局域网设备起备注名 |
 | clash_cleaner | 1 | 0 | sysupgrade-clash-cleaner | feed:ybjbox | 升级后清理 Clash 残留 |
 | cf_ipcheck | 1 | 0 | luci-app-cf-ipcheck | feed:ybjbox | Cloudflare 优选 IP 实测 |
 

@@ -42,7 +42,7 @@ expect_has "无线 board file 显式选中" "CONFIG_PACKAGE_ipq-wifi-jdcloud_re-
 expect_has "QCN9074 固件显式选中" "CONFIG_PACKAGE_ath11k-firmware-qcn9074=y"
 expect_has "ath11k PCI 驱动显式选中" "CONFIG_PACKAGE_kmod-ath11k-pci=y"
 expect_has "点阵屏驱动普通直选" "CONFIG_PACKAGE_luci-app-athena-led=y"
-expect_has "个人包在" "CONFIG_PACKAGE_athena-custom=y"
+expect_not "athena-custom 包不再装入（首启脚本改由 base-files 注入）" "CONFIG_PACKAGE_athena-custom=y"
 expect_has "工具在" "CONFIG_PACKAGE_htop=y"
 expect_has "zram 内核选项在" "CONFIG_KERNEL_ZRAM_BACKEND_LZ4=y"
 expect_has "启用 ccache 编译加速" "CONFIG_CCACHE=y"
@@ -52,6 +52,12 @@ expect_has "ImmortalWrt 定时重启已启用" "CONFIG_PACKAGE_luci-app-autorebo
 expect_has "mosdns 带 geoip" "CONFIG_PACKAGE_v2ray-geoip=y"
 expect_has "mosdns 带 geosite" "CONFIG_PACKAGE_v2ray-geosite=y"
 expect_not "不再输出无效的 v2ray-geodata" "CONFIG_PACKAGE_v2ray-geodata=y"
+
+# ybjbox 软件源的网址现在登记在 dhcp_comment 行，被 dhcp_comment / clash_cleaner /
+# cf_ipcheck 三行引用。网址一旦被删，gen-config.sh 会在完整性检查里 die，这里守住。
+run "$GEN" --features "$FEATURES" --list-feeds
+expect_code "列软件源成功" 0
+expect_has "ybjbox 网址登记仍在" "ybjbox=https://github.com/ybjbox/openwrt-packages.git"
 expect_not "bandix 已关闭（fwx 自带统计）" "CONFIG_PACKAGE_luci-app-bandix=y"
 expect_not "第三方主题已关闭" "CONFIG_PACKAGE_luci-theme-aurora=y"
 run "$GEN" --features "$FEATURES" --list-clones

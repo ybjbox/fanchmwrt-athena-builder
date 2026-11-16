@@ -98,7 +98,7 @@ tests/                               118 条回归断言（18 包校验 + 22 版
 |---|---|---|---|---|---|
 | openclash | 0 | 0 | luci-app-openclash | git:https://github.com/vernesong/OpenClash | 代理 |
 | tools_base | 1 | 0 | tmux htop nano-full ... | | 命令行与磁盘工具 |
-| athena_custom | 1 | 0 | athena-custom | feed:ybjbox=https://github.com/ybjbox/openwrt-packages.git | 个人默认值 |
+| athena_custom | 1 | 0 | | | 首启脚本由构建仓注入，包列表可以为空 |
 ```
 
 解析规则：只认带 6 列表头的表格（表头必须是 `名称 / 启用 / 设备附加包 / 包列表 / 来源 / 说明`）。`##` 标题、说明段落、其他列数的表格全部忽略——所以文件里可以放心写文档用的表格。每行必须 6 列，少写一个 `|` 会报错并指到行号。

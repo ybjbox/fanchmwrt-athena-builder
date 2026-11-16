@@ -184,8 +184,9 @@ jobs:
       - name: 安装首启脚本（写入 base-files overlay）
         run: |
           set -Eeuo pipefail
-          # feed 包 athena-custom 自 2026-11 起不再带首启脚本（旧版是 ImmortalWrt 遗留，
-          # 会写错 aurora 主题与软件源），这里统一由构建仓提供，直接写进 base-files overlay
+          # 首启脚本只由构建仓提供，直接写进 base-files overlay 随固件发布。
+          # 不再安装 athena-custom 包：features.md 的 athena_custom 行包列表已清空，
+          # 那个包自 2026-11 起只剩占位作用，且曾在 2026-11-16 让整轮编译失败。
           SRC=files/etc/uci-defaults/99-athena-custom-settings
           install -D -m 0755 "$SRC" \
             openwrt/package/base-files/files/etc/uci-defaults/99-athena-custom-settings
@@ -233,6 +234,10 @@ jobs:
       - name: 编译（实时显示进度）
         working-directory: openwrt
         run: |
+          # GitHub 的 bash 默认带 -e：make 一失败，整个 step 立刻退出，下面的
+          # 降级重跑与日志保存全被跳过（2026-11-16 那次失败就是这样，日志里
+          # 连"第一遍 make 退出码"都没打印，包级错误也没能留存）。显式关掉。
+          set +e
           set -o pipefail
           echo "---- ccache 状态（编译前）----"
           ccache -s || true
@@ -286,7 +291,11 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: build-log-${{ env.SOURCE_REF }}-${{ github.run_number }}
-          path: build-log-tail.txt
+          # build-log-tail.txt 是编译步骤自己整理的摘要；openwrt/logs 下是
+          # OpenWrt 按包分开记的真实错误（失败包的 compile.txt 在这里）。
+          path: |
+            build-log-tail.txt
+            openwrt/logs
           if-no-files-found: ignore
           retention-days: 7
 
