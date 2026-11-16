@@ -184,7 +184,7 @@ FanchmWrt 用的是官方 `openwrt/luci`（104 个应用），不带这个应用
 | 缓存 | 缓存内容 | 失效条件 | 预计收益（第二次起） |
 |---|---|---|---|
 | `dl` | 源码包下载目录 `openwrt/dl` | `features.md` 变化 | 省掉重复下载（已生效） |
-| `ccache` | `~/.ccache`（压缩、5G 上限） | `features.md` 变化；`restore-keys` 会兜底复用旧缓存 | **30–60 分钟** |
+| `ccache` | `openwrt/.ccache`（OpenWrt 强制指定此路径，不能用别处；上限 5G） | `features.md` 变化；`restore-keys` 会兜底复用旧缓存 | **30–60 分钟** |
 | 工具链 | `build_dir/host`、`build_dir/toolchain-*`、`staging_dir/host`、`staging_dir/toolchain-*` | 上游 commit 或 `features.md` 变化 | **20–30 分钟** |
 
 设计要点：

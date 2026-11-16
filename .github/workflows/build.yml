@@ -32,8 +32,10 @@ permissions:
 env:
   SOURCE_REPO: https://github.com/fanchmwrt/fanchmwrt-snapshot.git
   SOURCE_REF: ${{ inputs.source_ref || 'fanchmwrt-26.11' }}
-  # 编译加速：ccache 缓存目录随 actions/cache 持久化，二次构建可复用已编译目标
-  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  # 编译加速：ccache 缓存目录随 actions/cache 持久化，二次构建可复用已编译目标。
+  # 注意：OpenWrt 的 rules.mk 会强制 export CCACHE_DIR=$(TOPDIR)/.ccache（即 openwrt/.ccache），
+  # 忽略这里的值；这里写成同一路径，只是让 ccache -s 统计能读到真实缓存。
+  CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
   CCACHE_COMPRESS: "1"
   CCACHE_MAXSIZE: 5G
 
@@ -105,17 +107,19 @@ jobs:
             gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev \
             python3-setuptools rsync swig unzip zlib1g-dev file wget ccache
 
+      - name: 拉取源码
+        run: git clone --depth=1 --branch "$SOURCE_REF" "$SOURCE_REPO" openwrt
+
       - name: 恢复 ccache（编译缓存）
         id: ccache-restore
         uses: actions/cache/restore@v5
         with:
-          path: .ccache
-          key: ccache-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.md') }}-v1
+          # 必须放在源码 clone 之后：OpenWrt 把缓存写在源码树内的 openwrt/.ccache，
+          # 目录不存在时 restore 会自动建好，但 clone 会拒绝非空目录
+          path: openwrt/.ccache
+          key: ccache-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.md') }}-v2
           restore-keys: |
             ccache-${{ env.SOURCE_REF }}-
-
-      - name: 拉取源码
-        run: git clone --depth=1 --branch "$SOURCE_REF" "$SOURCE_REPO" openwrt
 
       - name: 恢复工具链缓存（host + 交叉工具链）
         id: tool-restore
@@ -267,7 +271,7 @@ jobs:
         if: success() && steps.ccache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
-          path: .ccache
+          path: openwrt/.ccache
           key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
 
       - name: 保存工具链缓存
