@@ -60,16 +60,16 @@ tests/                               118 条回归断言（18 包校验 + 22 版
 3. **触发构建**（三种方式）：
    - **手动**：Actions → Build FanchmWrt Athena → Run workflow
    - **定时**：每周五 03:30（北京时间）自动跑一次。GitHub cron 按 **UTC** 解释，表达式写 `30 19 * * 4`（= 周四 19:30 UTC）；改时间记得减 8 小时。实际开跑可能延迟几分钟到几十分钟
-   - **打 tag**：推送 `v*` tag 时自动构建，并以该 tag 发布正式 Release（不加 Pre-release 标记）
+   - **打 tag**：推送 `v*` tag 时自动构建，并以该 tag 发布 Release
 
-   定时任务有两条特别规则：
+   构建有两条自动规则：
 
-   - **上游没变就不编**：先比对 fanchmwrt 分支当前 commit 与上次构建记录（写在 Release 说明第一行 `upstream-commit:`），相同则整次跳过，省掉 1.5–2.5 小时
-   - **编完自动发 Release**：命名 `athena-<北京时间戳>`（如 `athena-20261120-0331`），标为 Pre-release、不抢 `latest`；正式版本仍由 `v*` tag 发布
+   - **上游没变就不编**（仅定时触发）：先比对 fanchmwrt 分支当前 commit 与上次构建记录（写在 Release 说明第一行 `upstream-commit:`），相同则整次跳过，省掉 1.5–2.5 小时
+   - **编完自动发 Release**：定时与手动构建统一命名 `athena-<北京时间戳>`（如 `athena-20261120-0331`），**都算正式版**（不标 Pre-release），也都**不抢 `latest`**——`latest` 只留给 `v*` tag 的手动发布
 
    定时任务单独占用一个并发组且不参与取消，**不会掐掉你正在手动跑的构建**；手动构建之间仍互相取消（连点两次只跑最新那次）。
 
-   > **定时 Release 会自动清理**：每次发布后只保留最近 4 个（约一个月、约 720MB），更早的连同 tag 一起删除。筛选条件是「Pre-release + `athena-` 前缀」，因此 `v*` 正式版和手动发布（未标 Pre-release）的版本**永远不会被误删**。想改保留数量，调 workflow 清理步骤里的 `KEEP`。
+   > **固件会自动清理**：每次发布后只保留最近 4 个 `athena-*` 版本（约一个月、约 720MB），更早的连同 tag 一起删除。`v*` tag 的发布不以 `athena-` 开头，**永远不会被删**。想改保留数量，调 workflow 清理步骤里的 `KEEP`。
 4. **取产物**：Artifacts 里的 `dist/`，含固件、`SHA256SUMS`、`BOM.txt`、`build-info.json`。
 
    发 Release 时，说明页会给出：每个固件的用途与 SHA256、必须用「小分区 uboot」的提示与本次 rootfs 余量、本次启用的功能清单、上游 commit 与配置哈希。说明由 `scripts/gen-release-notes.sh` 生成，任一项数据取不到就自动省略，不影响发布；末尾有一段「自动化读取区」（`upstream-commit:`），定时构建靠它判断上游是否变化，不要删。

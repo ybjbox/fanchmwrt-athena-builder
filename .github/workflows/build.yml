@@ -181,20 +181,16 @@ jobs:
                     % (len(missing), ", ".join(missing)))
           PY
 
-      - name: 覆盖默认配置（避免与 athena-custom 自带脚本重复执行）
+      - name: 安装首启脚本（写入 base-files overlay）
         run: |
           set -Eeuo pipefail
+          # feed 包 athena-custom 自 2026-11 起不再带首启脚本（旧版是 ImmortalWrt 遗留，
+          # 会写错 aurora 主题与软件源），这里统一由构建仓提供，直接写进 base-files overlay
           SRC=files/etc/uci-defaults/99-athena-custom-settings
-          FEED=openwrt/feeds/ybjbox/athena-custom/files/etc/uci-defaults/99-athena-custom-settings
-          if [ -f "$FEED" ]; then
-            cp "$SRC" "$FEED"
-            echo "已覆盖 feed 内脚本: $FEED"
-          else
-            install -D -m 0755 "$SRC" \
-              openwrt/package/base-files/files/etc/uci-defaults/99-athena-custom-settings
-            echo "已写入 base-files overlay"
-          fi
+          install -D -m 0755 "$SRC" \
+            openwrt/package/base-files/files/etc/uci-defaults/99-athena-custom-settings
           chmod +x "$SRC"
+          echo "已写入 base-files overlay"
 
       - name: 生成 .config（基线 + 功能开关）
         working-directory: openwrt
@@ -354,15 +350,12 @@ jobs:
             --kernel "$KERNEL" \
             --rootfs "$ROOTFS" \
             --out dist/release-notes.md
-          # 自动命名的版本（定时/手动）都不抢 latest，只有 v* tag 才是最新正式版；
-          # 定时版额外标 Pre-release，便于清理步骤只动它、不碰你手动发布的版本
+          # 自动命名的版本（定时/手动）都是正式版，不标 Pre-release；
+          # 只有 v* tag 抢 latest，athena-* 一律不抢，避免顶掉你手动发布的正式版
           EXTRA=""
           case "$TAG" in
             v*) ;;
-            *)
-              EXTRA="--latest=false"
-              if [ "${{ github.event_name }}" = "schedule" ]; then EXTRA="$EXTRA --prerelease"; fi
-              ;;
+            *)  EXTRA="--latest=false" ;;
           esac
           # shellcheck disable=SC2086
           gh release create "$TAG" \
@@ -370,23 +363,24 @@ jobs:
             --title "FanchmWrt Athena ${TAG}" \
             --notes-file dist/release-notes.md $EXTRA
 
-      - name: 清理旧的定时 Release（只留最近 4 个）
-        # 筛选条件：Pre-release + athena- 前缀 = 只有定时版本符合。
-        # v* 正式版与手动勾选发布的版本都不是 Pre-release，永远不会被这条规则删掉。
-        if: github.event_name == 'schedule'
+      - name: 清理旧的自动版本固件（只留最近 4 个）
+        # 定时与手动构建统一对待：所有自动命名（athena-*）的 Release 都算正式版，
+        # 按时间倒序保留最近 KEEP 个，更早的连同 tag 一起删除。
+        # v* tag 手动发布的正式版不以 athena- 开头，永远不会被这条规则碰到。
+        if: success() && (github.event_name == 'schedule' || inputs.create_release || startsWith(github.ref, 'refs/tags/'))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           KEEP: 4
         run: |
           set -Eeuo pipefail
-          echo "定时版本保留最近 ${KEEP} 个，更早的删除："
-          gh release list --limit 100 --json tagName,createdAt,isPrerelease \
-            --jq '[.[] | select(.isPrerelease) | select(.tagName | startswith("athena-"))]
+          echo "自动版本（athena-*）保留最近 ${KEEP} 个，更早的删除："
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("athena-"))]
                   | sort_by(.createdAt) | reverse | .['"$KEEP"':] | .[].tagName' \
           | while IFS= read -r tag; do
               [ -n "$tag" ] || continue
               echo "  - 删除 $tag"
               gh release delete "$tag" --yes --cleanup-tag || echo "    删除失败（跳过）: $tag"
             done
-          echo "清理完成，当前定时版本数：$(gh release list --limit 100 --json tagName,isPrerelease \
-            --jq '[.[] | select(.isPrerelease) | select(.tagName | startswith("athena-"))] | length')"
+          echo "清理完成，当前自动版本数：$(gh release list --limit 100 --json tagName \
+            --jq '[.[] | select(.tagName | startswith("athena-"))] | length')"
