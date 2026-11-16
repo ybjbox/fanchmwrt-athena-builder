@@ -29,7 +29,7 @@ env:
 jobs:
   build:
     name: Athena / ${{ github.event_name }}
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 360
 
     steps:
@@ -44,10 +44,12 @@ jobs:
 
       - name: 安装编译依赖
         run: |
+          # Ubuntu 24.04 自带 Python 3.12，官方依赖清单已去掉 python3-distutils
+          # （该包在 24.04 不再提供，写上会直接 apt 报错），改用 python3-setuptools
           sudo apt-get update
           sudo apt-get install -y build-essential clang flex bison g++ gawk \
-            gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
-            python3-distutils rsync unzip zlib1g-dev file wget
+            gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev \
+            python3-setuptools rsync swig unzip zlib1g-dev file wget
 
       - name: 拉取源码
         run: git clone --depth=1 --branch "$SOURCE_REF" "$SOURCE_REPO" openwrt
