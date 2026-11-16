@@ -329,10 +329,16 @@ jobs:
           UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
         run: |
           set -Eeuo pipefail
+          # 标题给人看：自动版本只显示北京时间，不再重复堆 "athena-" 前缀；
+          # 真正的唯一标识是 tag（athena-20261116-1542），侧栏点开即可看到
           TAG="${{ github.ref_name }}"
+          TITLE="$TAG"
           case "$TAG" in
             v*) ;;
-            *) TAG="athena-$(TZ='Asia/Shanghai' date +%Y%m%d-%H%M)" ;;
+            *)
+              TITLE="$(date -u -d '+8 hours' '+%Y-%m-%d %H:%M')"
+              TAG="athena-$(date -u -d '+8 hours' '+%Y%m%d-%H%M')"
+              ;;
           esac
           # 生成给人看的说明（刷机要点 / 功能清单 / 校验 / 追溯）
           KERNEL="$(ls -d openwrt/build_dir/target-*/linux-qualcommax_ipq60xx/linux-* 2>/dev/null \
@@ -360,7 +366,7 @@ jobs:
           # shellcheck disable=SC2086
           gh release create "$TAG" \
             dist/firmware/* dist/SHA256SUMS dist/BOM.txt dist/build-info.json \
-            --title "FanchmWrt Athena ${TAG}" \
+            --title "$TITLE" \
             --notes-file dist/release-notes.md $EXTRA
 
       - name: 清理旧的自动版本固件（只留最近 4 个）
