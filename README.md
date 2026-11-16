@@ -68,7 +68,7 @@ tests/                               109 条回归断言（18 包校验 + 22 版
 
    定时任务单独占用一个并发组且不参与取消，**不会掐掉你正在手动跑的构建**；手动构建之间仍互相取消（连点两次只跑最新那次）。
 
-   > 定时 Release 会累积：每个约 180MB（3 个固件 + 校验/BOM），每周一次一年约 9GB。想控体积可在 Releases 页手动删旧的，或把「发布 Release」步骤的附件改成只传 `factory.bin` + `sysupgrade.bin`。
+   > **定时 Release 会自动清理**：每次发布后只保留最近 4 个（约一个月、约 720MB），更早的连同 tag 一起删除。筛选条件是「Pre-release + `athena-` 前缀」，因此 `v*` 正式版和手动发布（未标 Pre-release）的版本**永远不会被误删**。想改保留数量，调 workflow 清理步骤里的 `KEEP`。
 4. **取产物**：Artifacts 里的 `dist/`，含固件、`SHA256SUMS`、`BOM.txt`、`build-info.json`。
 5. **刷机**：不死 uboot 刷 `factory.bin`，之后系统内升 `sysupgrade.bin`；**用 1.0.5 起必须不保留配置**。
 

@@ -351,3 +351,24 @@ jobs:
             dist/firmware/* dist/SHA256SUMS dist/BOM.txt dist/build-info.json \
             --title "FanchmWrt Athena ${TAG}" \
             --notes-file dist/release-notes.txt $EXTRA
+
+      - name: 清理旧的定时 Release（只留最近 4 个）
+        # 筛选条件：Pre-release + athena- 前缀 = 只有定时版本符合。
+        # v* 正式版与手动勾选发布的版本都不是 Pre-release，永远不会被这条规则删掉。
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP: 4
+        run: |
+          set -Eeuo pipefail
+          echo "定时版本保留最近 ${KEEP} 个，更早的删除："
+          gh release list --limit 100 --json tagName,createdAt,isPrerelease \
+            --jq '[.[] | select(.isPrerelease) | select(.tagName | startswith("athena-"))]
+                  | sort_by(.createdAt) | reverse | .['"$KEEP"':] | .[].tagName' \
+          | while IFS= read -r tag; do
+              [ -n "$tag" ] || continue
+              echo "  - 删除 $tag"
+              gh release delete "$tag" --yes --cleanup-tag || echo "    删除失败（跳过）: $tag"
+            done
+          echo "清理完成，当前定时版本数：$(gh release list --limit 100 --json tagName,isPrerelease \
+            --jq '[.[] | select(.isPrerelease) | select(.tagName | startswith("athena-"))] | length')"
