@@ -155,6 +155,11 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+      - name: 回归测试（首启脚本）
+        # 必须在「注入 Secrets」之前跑：测试自己对占位符做替换，
+        # 真实模板被替换过之后就测不出「Secret 没配」这类场景了。
+        run: bash tests/run-defaults-tests.sh
+
       - name: 注入 Secrets 到默认配置
         env:
           PPPOE_USERNAME: ${{ secrets.PPPOE_USERNAME }}
@@ -168,21 +173,65 @@ jobs:
           # Secret 名与仓库 Settings 里配置的完全一致（无 MY_ 前缀）；
           # 占位符 __MY_*__ 是模板里的固定字面量，与 Secret 命名无关。
           python3 - <<'PY'
-          import os
+          import hashlib, os, sys
 
           path = "files/etc/uci-defaults/99-athena-custom-settings"
-          text = open(path, encoding="utf-8").read()
-          mapping = {
-              "__MY_PPPOE_USERNAME__": os.environ.get("PPPOE_USERNAME", ""),
-              "__MY_PPPOE_PASSWORD__": os.environ.get("PPPOE_PASSWORD", ""),
-              "__MY_WIFI_SSID_2G__":   os.environ.get("WIFI_SSID_2G", ""),
-              "__MY_WIFI_SSID_5G__":   os.environ.get("WIFI_SSID_5G", ""),
-              "__MY_WIFI_PASSWORD__":  os.environ.get("WIFI_PASSWORD", ""),
-              "__MY_ADMIN_PASSWORD__": os.environ.get("ADMIN_PASSWORD", ""),
+          env = {
+              "PPPOE_USERNAME":   os.environ.get("PPPOE_USERNAME", ""),
+              "PPPOE_PASSWORD":   os.environ.get("PPPOE_PASSWORD", ""),
+              "WIFI_SSID_2G":     os.environ.get("WIFI_SSID_2G", ""),
+              "WIFI_SSID_5G":     os.environ.get("WIFI_SSID_5G", ""),
+              "WIFI_PASSWORD":    os.environ.get("WIFI_PASSWORD", ""),
+              "ADMIN_PASSWORD":   os.environ.get("ADMIN_PASSWORD", ""),
           }
+          mapping = {
+              "__MY_PPPOE_USERNAME__": env["PPPOE_USERNAME"],
+              "__MY_PPPOE_PASSWORD__": env["PPPOE_PASSWORD"],
+              "__MY_WIFI_SSID_2G__":   env["WIFI_SSID_2G"],
+              "__MY_WIFI_SSID_5G__":   env["WIFI_SSID_5G"],
+              "__MY_WIFI_PASSWORD__":  env["WIFI_PASSWORD"],
+              "__MY_ADMIN_PASSWORD__": env["ADMIN_PASSWORD"],
+          }
+
+          # ---- 红线：SSID 是明文广播的，装错一格等于把密码公开出去 ----
+          # 2026-11-17 那版固件就是把密码写进了 5G 的信号名（设备上看得见，
+          # 密码本身又是对的），说明是 Secrets 填错位而不是脚本取错变量。
+          # 这类错误必须在编译前拦住，不能等刷完机才发现。
+          errors = []
+          for name in ("WIFI_SSID_2G", "WIFI_SSID_5G"):
+              v = env[name]
+              if not v:
+                  continue
+              if env["WIFI_PASSWORD"] and v == env["WIFI_PASSWORD"]:
+                  errors.append(
+                      "%s 的值与 WIFI_PASSWORD 完全相同 —— 这会把 WiFi 密码当成\n"
+                      "    信号名明文广播出去。请到 Settings → Secrets 检查是不是把密码\n"
+                      "    粘错了格子（%s 填的应该是无线名称，不是密码）。" % (name, name))
+              if len(v.encode()) > 32:
+                  errors.append("%s 有 %d 字节，超过 SSID 上限 32 字节" % (name, len(v.encode())))
+              if any(c in v for c in "\r\n\t"):
+                  errors.append("%s 含换行或制表符（多半是粘贴时带进来的）" % name)
+
+          # 只打印指纹，不打印明文：一眼能看出"哪个 Secret 装的是同一段文本"
+          def fp(v):
+              return "%2d 字节 / %s" % (len(v), hashlib.sha256(v.encode()).hexdigest()[:8]) if v else "（空）"
+
+          print("---- Secrets 指纹（明文不外泄）----")
+          for name in ("WIFI_SSID_2G", "WIFI_SSID_5G", "WIFI_PASSWORD"):
+              print("  %-14s %s" % (name, fp(env[name])))
+          if env["WIFI_SSID_2G"] and env["WIFI_SSID_2G"] == env["WIFI_SSID_5G"]:
+              print("  (注：2G 与 5G 同名)")
+
+          if errors:
+              for e in errors:
+                  print("::error:: %s" % e.replace("\n", "%0A"))
+              sys.exit(1)
+
+          text = open(path, encoding="utf-8").read()
           for k, v in mapping.items():
               text = text.replace(k, v)
           open(path, "w", encoding="utf-8", newline="\n").write(text)
+
           filled = [k for k, v in mapping.items() if v]
           print("已填充占位符:", len(filled), "/", len(mapping))
           if len(filled) < len(mapping):

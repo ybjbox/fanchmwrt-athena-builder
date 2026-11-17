@@ -36,7 +36,7 @@ scripts/check-packages.sh            包校验（--features 合并自动派生�
 scripts/gen-lock.sh / verify-lock.sh 版本锁
 scripts/hash-artifacts.sh            SHA256SUMS / BOM / build-info.json
 scripts/gen-release-notes.sh         Release 说明（刷机要点 / 功能清单 / 校验 / 追溯）
-tests/                               118 条回归断言（18 包校验 + 22 版本锁 + 78 开关）
+tests/                               146 条回归断言（18 包校验 + 22 版本锁 + 82 开关 + 24 首启脚本）
 ```
 
 ---
@@ -56,6 +56,18 @@ tests/                               118 条回归断言（18 包校验 + 22 版
    Secret 名**没有 `MY_` 前缀**（以仓库 Settings 里实际配置为准）；模板里的占位符 `__MY_*__` 只是 uci-defaults 脚本的固定字面量，两者不要混为一谈。首编曾因这里写成 `MY_*` 导致 `已填充占位符: 0 / 6`，现在流水线会在有未填充项时给出 warning。
 
    不填的项会保持占位符形态，`uci-defaults` 里的 `valid()` 会跳过它，不会把 SSID 写成 `__MY_*`。
+
+   > **SSID 一栏只能填无线名称，不能填密码。** SSID 是明文广播的：填成密码等于把 WiFi 密码
+   > 贴在空气里，周围任何设备扫一下就能看到（2026-11-17 那版固件就是这么出去的——5G 的信号名
+   > 显示成了密码，而密码本身又是对的，典型"粘错格子"）。
+   >
+   > 现在有两道拦截，都不需要你记住：
+   > - **编译前**：注入步骤会打印三个值的「字节数 + SHA256 前 8 位」指纹。`WIFI_SSID_*` 的指纹
+   >   和 `WIFI_PASSWORD` 一样，就是填错了；此时流水线直接 `::error::` 失败，不会产出固件
+   > - **首启时**：即使漏过第一道，`uci-defaults` 发现 SSID 与密码相同时会退回 `Athena` /
+   >   `Athena_5G`，并写一条 `logread | grep athena-defaults` 能看到的告警日志
+   >
+   > 真出现过这种情况，除了改 Secret，还要**换掉 WiFi 密码**——它已经在明文广播里待过了。
 
 3. **触发构建**（三种方式）：
    - **手动**：Actions → Build FanchmWrt Athena → Run workflow

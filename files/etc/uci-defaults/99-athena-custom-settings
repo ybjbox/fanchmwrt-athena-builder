@@ -19,6 +19,36 @@ valid() {
   return 0
 }
 
+log() { logger -t athena-defaults "$*" 2>/dev/null || true; }
+
+# ── 0. SSID 红线 ──
+# SSID 是明文广播的：一旦某个 SSID 变量装的是 WiFi 密码，密码就等于
+# 公开贴在空气里。Secret 填错位（把密码粘到 WIFI_SSID_5G 一栏）时症状
+# 正是"5G 的信号名是密码，但密码也能连上"。这里不信任输入：
+#   - 与密码相同 → 换成回退名，并留一条系统日志
+#   - 超过 32 字节 → 截断（hostapd 上限）
+# 2026-11-17 交付的那版固件就是靠这条规则才没有继续广播密码。
+ssid_guard() { # <SSID> <回退名>
+  _v="$1"
+  _fb="$2"
+  if valid "$WIFI_PASS" && [ "$_v" = "$WIFI_PASS" ]; then
+    log "SSID 与 WiFi 密码相同，已回退为 $_fb（密码会随 SSID 明文广播，请检查 Secrets 是否填错位）"
+    printf '%s' "$_fb"
+    return 0
+  fi
+  if [ "${#_v}" -gt 32 ]; then
+    log "SSID 超过 32 字节，已截断为前 32 字节（原值 ${#_v} 字节）"
+    printf '%.32s' "$_v"
+    return 0
+  fi
+  printf '%s' "$_v"
+}
+
+SSID_2G=""
+SSID_5G=""
+valid "$WIFI_2G" && SSID_2G="$(ssid_guard "$WIFI_2G" 'Athena')"
+valid "$WIFI_5G" && SSID_5G="$(ssid_guard "$WIFI_5G" 'Athena_5G')"
+
 # ── 1. 主机名 / LAN 地址 ──
 uci set system.@system[0].hostname='Athena'
 uci set network.lan.ipaddr='10.0.0.1'
@@ -43,43 +73,60 @@ uci -q delete dhcp.lan.dhcpv6 2>/dev/null || true
 /etc/init.d/odhcpd disable 2>/dev/null || true
 
 # ── 4. 无线：2.4G 独立 SSID，双 5G 同名实现漫游 ──
-[ -s /etc/config/wireless ] || (wifi detect > /etc/config/wireless 2>/dev/null || true)
-uci commit wireless
-wifi up >/dev/null 2>&1 || true
+# /etc/config/wireless 由 /etc/init.d/boot 里的 `wifi config`（读 board.json）
+# 在 uci-defaults 之前生成，正常情况下这里已经有带 band 的 radio 段。
+# 兜底写法必须用 `wifi config`：`wifi detect` 在 23.05+ 已废弃，只往 stderr
+# 打一行警告就 exit 1，用它做兜底只会留下一个空的 /etc/config/wireless。
+if [ ! -s /etc/config/wireless ]; then
+  wifi config >/dev/null 2>&1 || true
+fi
 
 idx=0
-while uci get wireless.@wifi-iface[$idx] >/dev/null 2>&1; do
-  dev=$(uci get wireless.@wifi-iface[$idx].device)
-  band=$(uci -q get wireless.$dev.band)
-  mode=$(uci -q get wireless.$dev.hwmode)
-  if [ "$band" = "2g" ] || [ "$mode" = "11g" ]; then
-    valid "$WIFI_2G" && uci set wireless.@wifi-iface[$idx].ssid="$WIFI_2G"
-  else
-    valid "$WIFI_5G" && uci set wireless.@wifi-iface[$idx].ssid="$WIFI_5G"
-  fi
-  if valid "$WIFI_PASS"; then
-    uci set wireless.@wifi-iface[$idx].encryption='psk2'
-    uci set wireless.@wifi-iface[$idx].key="$WIFI_PASS"
+while uci -q get "wireless.@wifi-iface[$idx]" >/dev/null 2>&1; do
+  mode=$(uci -q get "wireless.@wifi-iface[$idx].mode")
+  dev=$(uci -q get "wireless.@wifi-iface[$idx].device")
+  band=$(uci -q get "wireless.$dev.band")
+  hw=$(uci -q get "wireless.$dev.hwmode")
+
+  # 只动 AP 接口：sta / 中继 之类的接口不该被改名改密码
+  if [ "$mode" = "ap" ] || [ -z "$mode" ]; then
+    case "${band:-$hw}" in
+      2g|11b|11g)
+        [ -n "$SSID_2G" ] && uci set "wireless.@wifi-iface[$idx].ssid=$SSID_2G"
+        ;;
+      *)
+        [ -n "$SSID_5G" ] && uci set "wireless.@wifi-iface[$idx].ssid=$SSID_5G"
+        ;;
+    esac
+    if valid "$WIFI_PASS"; then
+      uci set "wireless.@wifi-iface[$idx].encryption=psk2"
+      uci set "wireless.@wifi-iface[$idx].key=$WIFI_PASS"
+    fi
   fi
   idx=$((idx + 1))
 done
 
 radio=0
-while uci get wireless.radio$radio >/dev/null 2>&1; do
-  uci set wireless.radio$radio.disabled='0'
-  band=$(uci -q get wireless.radio$radio.band)
-  mode=$(uci -q get wireless.radio$radio.hwmode)
-  if [ "$band" = "2g" ] || [ "$mode" = "11g" ]; then
-    uci set wireless.radio$radio.channel='11'
-    uci set wireless.radio$radio.htmode='HT20'
-  else
-    uci set wireless.radio$radio.channel='auto'
-  fi
+while uci -q get "wireless.radio$radio" >/dev/null 2>&1; do
+  uci set "wireless.radio$radio.disabled=0"
+  band=$(uci -q get "wireless.radio$radio.band")
+  hw=$(uci -q get "wireless.radio$radio.hwmode")
+  case "${band:-$hw}" in
+    2g|11b|11g)
+      uci set "wireless.radio$radio.channel=11"
+      uci set "wireless.radio$radio.htmode=HT20"
+      ;;
+    *)
+      uci set "wireless.radio$radio.channel=auto"
+      ;;
+  esac
   radio=$((radio + 1))
 done
 
 uci commit wireless
 wifi reload >/dev/null 2>&1 || true
+
+log "无线已写入：2G=${SSID_2G:-（未设置）} 5G=${SSID_5G:-（未设置）}"
 
 # ── 5. 关闭 Fastnat（流量统计依赖 conntrack，必须保持关闭）──
 uci set fastnat.global.enabled='0'
