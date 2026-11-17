@@ -149,6 +149,52 @@ fi
 # 插件默认 enabled=0，刷完不会自动重启；要启用请到网页「系统 → 定时重启」
 # 自己开、自己设时间。这里刻意不写 /etc/crontabs/root，避免两套计划重复重启。
 
+# ── 9. 关掉 80 → 443 强制跳转（局域网用 HTTP 直连）──
+# 这版固件的 LuCI 跑在 nginx + uwsgi 上，默认把 80 端口交给 _redirect2ssl：
+#   访问 http://10.0.0.1 → 302 到 https://10.0.0.1/... → 自签证书警告
+# （警告不是故障：证书里没有 IP:10.0.0.1 这个 SAN，导入根证书也消不掉。）
+# 局域网自用没必要走 HTTPS：让 _lan 同时监听 80，删掉只做跳转的那个 server。
+# 访问 10.0.0.1 仍会 302 到 /cgi-bin/luci/，那是 LuCI 自己的路径补全，属正常。
+#
+# 两个必须写清的细节：
+#   - listen 是列表，必须用 add_list；写成 set 会把 443 那两条覆盖掉，网页直接打不开
+#   - nginx-util 的 init_lan 只重建 listen 文件与配置产物，不会把 _redirect2ssl
+#     写回 UCI，所以这里的删除是持久的，重启不会复活
+# 改完立刻用 nginx -t 校验；不通过就还原，宁可保留跳转也不能让网页打不开。
+# 想保留默认的强制跳转：把下面的 ATHENA_NGINX_HTTP_ONLY 设为 0。
+NGINX_UCI="${ATHENA_NGINX_UCI:-/etc/config/nginx}"
+if [ "${ATHENA_NGINX_HTTP_ONLY:-1}" = "1" ] && [ -f "$NGINX_UCI" ]; then
+  cp -f "$NGINX_UCI" "$NGINX_UCI.athena-bak" 2>/dev/null || true
+
+  uci -q delete nginx._redirect2ssl 2>/dev/null || true
+  uci -q add_list nginx._lan.listen='80 default_server' 2>/dev/null || true
+  # 固件若保留了 IPv6 监听（_lan 里有 [::]:443），80 也补一条保持对称；
+  # 没保留就不加，避免在关掉 IPv6 的环境里让 nginx 绑不上 [::] 而起不来。
+  if uci -q get nginx._lan.listen 2>/dev/null | grep -q '\[::\]'; then
+    uci -q add_list nginx._lan.listen='[::]:80 default_server' 2>/dev/null || true
+  fi
+  uci -q commit nginx 2>/dev/null || true
+
+  if [ -x /usr/bin/nginx-util ] && [ -x /usr/sbin/nginx ]; then
+    eval "$(/usr/bin/nginx-util get_env 2>/dev/null)" || true
+    CONF_TEST="${UCI_CONF:-/etc/nginx/uci.conf}"
+    # init_lan 按新的 UCI 重新生成配置并补齐自签证书，再交给 nginx -t 试跑
+    if /usr/bin/nginx-util init_lan >/dev/null 2>&1 && [ -e "$CONF_TEST" ]; then
+      if /usr/sbin/nginx -t -c "$CONF_TEST" -g 'daemon off;' >/dev/null 2>&1; then
+        # 60_nginx-luci-support 在本脚本之前就已经把 nginx 拉起来了，必须重启才生效
+        /etc/init.d/nginx restart >/dev/null 2>&1 || true
+        log "已关闭 80 → 443 强制跳转：http://10.0.0.1 可直连 LuCI"
+      else
+        cp -f "$NGINX_UCI.athena-bak" "$NGINX_UCI" 2>/dev/null || true
+        uci -q commit nginx 2>/dev/null || true
+        /usr/bin/nginx-util init_lan >/dev/null 2>&1 || true
+        /etc/init.d/nginx restart >/dev/null 2>&1 || true
+        log "nginx 80 端口改动未通过校验，已回滚为 HTTPS 强制跳转"
+      fi
+    fi
+  fi
+fi
+
 uci commit network
 uci commit dhcp
 uci commit system

@@ -30,13 +30,13 @@ configs/features.md                  唯一开关表：编哪些包 + 拉哪些�
 scripts/gen-config.sh                由 features.md 生成 .config 片段 / clone / gitdir / required 清单
 configs/required-packages.txt        16 个固定底座包（其余由开关表自动派生，不要手改）
 configs/forbidden-packages.txt       [block] / [warn]
-files/etc/uci-defaults/99-...        首启默认值（PPPoE / WiFi / LAN IP / 关 IPv6；不含定时重启）
+files/etc/uci-defaults/99-...        首启默认值（PPPoE / WiFi / LAN IP / 关 IPv6 / 关 HTTPS 跳转；不含定时重启）
 scripts/diy.sh                       全部定制（feed + clone + 稀疏取单目录）
 scripts/check-packages.sh            包校验（--features 合并自动派生的点名册）
 scripts/gen-lock.sh / verify-lock.sh 版本锁
 scripts/hash-artifacts.sh            SHA256SUMS / BOM / build-info.json
 scripts/gen-release-notes.sh         Release 说明（刷机要点 / 功能清单 / 校验 / 追溯）
-tests/                               146 条回归断言（18 包校验 + 22 版本锁 + 82 开关 + 24 首启脚本）
+tests/                               152 条回归断言（18 包校验 + 22 版本锁 + 82 开关 + 30 首启脚本）
 ```
 
 ---

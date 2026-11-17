@@ -65,6 +65,16 @@ case "$cmd" in
     k="$(key_of "${1%%=*}")"
     printf '%s=%s\n' "$k" "${1#*=}" >> "$DB"
     ;;
+  add_list)
+    # 只用于 nginx._lan.listen：按真实 uci 的列表语义追加，用 | 连接多个值
+    k="$(key_of "${1%%=*}")"
+    v="$(getv "$k")"
+    if [ -n "$v" ]; then
+      printf '%s=%s|%s\n' "$k" "$v" "${1#*=}" >> "$DB"
+    else
+      printf '%s=%s\n' "$k" "${1#*=}" >> "$DB"
+    fi
+    ;;
   delete)
     k="$(key_of "$1")"
     printf '%s=\n' "$k" >> "$DB"
@@ -113,6 +123,15 @@ get_db() { # <db> <key> —— 与桩一致：后写覆盖先写
   printf '%s' "$v"
 }
 
+# 假设备：nginx 默认配置 —— _lan 双栈监听 443，_redirect2ssl 占着 80 做跳转。
+# 列表值用 | 连接（与桩的 add_list 一致），这样"443 有没有被覆盖掉"测得出来。
+seed_nginx() { # <db>
+  printf 'nginx._lan=server\n'                                      >> "$1"
+  printf 'nginx._lan.listen=443 ssl default_server|[::]:443 ssl default_server\n' >> "$1"
+  printf 'nginx._redirect2ssl=server\n'                             >> "$1"
+  printf 'nginx._redirect2ssl.listen=80|[::]:80\n'                  >> "$1"
+}
+
 # run_defaults <tag> <ssid2g> <ssid5g> <pass> [skip5g]
 #   skip5g 非空时保留 __MY_WIFI_SSID_5G__ 占位符，模拟该 Secret 没配
 run_defaults() {
@@ -131,6 +150,10 @@ run_defaults() {
   export LOG_FILE="$root/log.txt"
   : > "$LOG_FILE"
   seed_wireless "$UCI_DB"
+  # nginx 段：给一个真实存在的空文件当 /etc/config/nginx，让脚本走 nginx 分支
+  seed_nginx "$UCI_DB"
+  export ATHENA_NGINX_UCI="$root/nginx"
+  : > "$ATHENA_NGINX_UCI"
   PATH="$BIN:$PATH" $SH "$root/script" > /dev/null 2>&1 < /dev/null
   RC=$?
 }
@@ -210,6 +233,43 @@ case "$CODE_ONLY" in
   *"wifi detect"*) bad "代码里不再调用 wifi detect" "注释可以提，代码不能调" ;;
   *) ok "代码里不再调用 wifi detect" ;;
 esac
+
+# ══ t8 nginx：关掉 80 → 443 强制跳转，但 443 不能被覆盖 ══
+echo "== t8 nginx 直连 HTTP：_lan 加 80、_redirect2ssl 删除 =="
+DB="$WORK/t1/uci"
+NGINX_80="$(get_db "$DB" nginx._lan.listen)"
+expect_eq "只做跳转的 _redirect2ssl 已被删除" "" "$(get_db "$DB" nginx._redirect2ssl)"
+case "$NGINX_80" in
+  *"80 default_server"*) ok "_lan 增加 80 default_server" ;;
+  *) bad "_lan 增加 80 default_server" "listen=$NGINX_80" ;;
+esac
+case "$NGINX_80" in
+  *"443 ssl default_server"*) ok "443 监听未被 add_list 覆盖（用 set 会丢网页）" ;;
+  *) bad "443 监听未被 add_list 覆盖（用 set 会丢网页）" "listen=$NGINX_80" ;;
+esac
+case "$NGINX_80" in
+  *"[::]:80 default_server"*) ok "IPv6 环境同时补 [::]:80" ;;
+  *) bad "IPv6 环境同时补 [::]:80" "listen=$NGINX_80" ;;
+esac
+
+# ══ t9 没有 nginx 配置时，不能凭空写 nginx 段 ══
+echo "== t9 固件里没有 /etc/config/nginx → 不碰 nginx =="
+root="$WORK/t9"
+mkdir -p "$root"
+sed -e "s|__MY_WIFI_SSID_2G__|Athena_2G|g" \
+    -e "s|__MY_WIFI_SSID_5G__|Athena_5G|g" \
+    -e "s|__MY_WIFI_PASSWORD__|Passw0rd123|g" "$SCRIPT" > "$root/script"
+export UCI_DB="$root/uci"
+export LOG_FILE="$root/log.txt"
+: > "$LOG_FILE"
+seed_wireless "$UCI_DB"
+seed_nginx "$UCI_DB"
+ATHENA_NGINX_UCI="$root/no-such-nginx" PATH="$BIN:$PATH" \
+  $SH "$root/script" > /dev/null 2>&1 < /dev/null
+DB="$UCI_DB"
+expect_eq "没有配置文件时不写 listen" \
+  "443 ssl default_server|[::]:443 ssl default_server" "$(get_db "$DB" nginx._lan.listen)"
+expect_eq "没有配置文件时不删 _redirect2ssl" "server" "$(get_db "$DB" nginx._redirect2ssl)"
 
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"
