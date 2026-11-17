@@ -46,6 +46,9 @@ expect_not "athena-custom 包不再装入（首启脚本改由 base-files 注入
 expect_has "工具在" "CONFIG_PACKAGE_htop=y"
 expect_has "zram 内核选项在" "CONFIG_KERNEL_ZRAM_BACKEND_LZ4=y"
 expect_has "启用 ccache 编译加速" "CONFIG_CCACHE=y"
+# CCACHE 的选项定义是 `bool "Use ccache" if DEVEL`：DEVEL 没开，这一行会被
+# make defconfig 当未知符号静默丢弃，编译照常成功但全程不走缓存（2026-11-17 查清）。
+expect_has "ccache 依赖的 DEVEL 一并写入" "CONFIG_DEVEL=y"
 expect_has "策略性禁用 OAF" "# CONFIG_PACKAGE_luci-app-oaf is not set"
 expect_has "OpenClash 已启用" "CONFIG_PACKAGE_luci-app-openclash=y"
 expect_has "ImmortalWrt 定时重启已启用" "CONFIG_PACKAGE_luci-app-autoreboot=y"

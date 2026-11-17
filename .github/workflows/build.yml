@@ -28,6 +28,8 @@ concurrency:
 
 permissions:
   contents: write
+  # 末尾「清理过期缓存」要用 REST 删缓存条目
+  actions: write
 
 env:
   SOURCE_REPO: https://github.com/fanchmwrt/fanchmwrt-snapshot.git
@@ -35,9 +37,11 @@ env:
   # 编译加速：ccache 缓存目录随 actions/cache 持久化，二次构建可复用已编译目标。
   # 注意：OpenWrt 的 rules.mk 会强制 export CCACHE_DIR=$(TOPDIR)/.ccache（即 openwrt/.ccache），
   # 忽略这里的值；这里写成同一路径，只是让 ccache -s 统计能读到真实缓存。
+  # 另外 rules.mk 还会强制 CCACHE_NOCOMPRESS=true，所以缓存是未压缩的，上限要留足余量。
+  # 仓库缓存总配额 10GB：dl 约 2.1GB + 工具链约 1.2GB，ccache 留 3GB，合计约 6.3GB。
   CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
   CCACHE_COMPRESS: "1"
-  CCACHE_MAXSIZE: 5G
+  CCACHE_MAXSIZE: 3G
 
 jobs:
   # 仅定时触发时运行：上游 commit 没变就跳过整次构建，省掉无意义的 1.5–2.5 小时。
@@ -116,9 +120,15 @@ jobs:
         with:
           # 必须放在源码 clone 之后：OpenWrt 把缓存写在源码树内的 openwrt/.ccache，
           # 目录不存在时 restore 会自动建好，但 clone 会拒绝非空目录
+          #
+          # key 里带 run_number 是故意的：GitHub 的同名缓存不允许覆盖，若 key 固定，
+          # 第一次存下后永远是 cache-hit，新编译的对象再也存不进去（缓存只会越来越旧）。
+          # 每次换新 key + restore-keys 前缀兜底，等于「接着上一版继续攒」，
+          # 旧条目由末尾的「清理过期缓存」步骤删掉，始终只留最新一份。
           path: openwrt/.ccache
-          key: ccache-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.md') }}-v2
+          key: ccache-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.md') }}-v3-${{ github.run_number }}
           restore-keys: |
+            ccache-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.md') }}-v3-
             ccache-${{ env.SOURCE_REF }}-
 
       - name: 恢复工具链缓存（host + 交叉工具链）
@@ -132,7 +142,7 @@ jobs:
             openwrt/build_dir/toolchain-*
             openwrt/staging_dir/host
             openwrt/staging_dir/toolchain-*
-          key: toolchain-${{ env.SOURCE_REF }}-${{ steps.upstream.outputs.sha }}-${{ hashFiles('configs/features.md') }}-v1
+          key: toolchain-${{ env.SOURCE_REF }}-${{ steps.upstream.outputs.sha }}-${{ hashFiles('configs/features.md') }}-v2-${{ github.run_number }}
           restore-keys: |
             toolchain-${{ env.SOURCE_REF }}-${{ steps.upstream.outputs.sha }}-
 
@@ -216,6 +226,14 @@ jobs:
             echo "::error::检测到 8devices 设备被选中，目标已漂移"; grep -E '^CONFIG_TARGET_DEVICE_' .config || true; exit 1
           fi
           echo "[设备护栏] 目标 = 雅典娜（jdcloud_re-cs-02），确认无误"
+          # ---- 加速护栏：CCACHE 的提示受 CONFIG_DEVEL 控制，DEVEL 没开就会
+          #      被 defconfig 静默丢弃（编译照常成功，只是全程不走缓存）。
+          #      2026-11-17 就是靠这条线索查明「保存出来的 ccache 只有 15KB」。----
+          grep -qx 'CONFIG_DEVEL=y' .config \
+            || { echo "::error::CONFIG_DEVEL 丢失，ccache 会连带失效"; exit 1; }
+          grep -qx 'CONFIG_CCACHE=y' .config \
+            || { echo "::error::CONFIG_CCACHE 未生效（该选项的提示由 CONFIG_DEVEL 控制）"; exit 1; }
+          echo "[加速护栏] ccache = 已启用（DEVEL + CCACHE 均在 .config 中）"
 
       - name: 校验 required 包（编译前）
         run: bash scripts/check-packages.sh --config openwrt/.config --features configs/features.md
@@ -269,14 +287,18 @@ jobs:
           exit "$rc2"
 
       - name: 保存 ccache（编译缓存）
-        if: success() && steps.ccache-restore.outputs.cache-hit != 'true'
+        # key 带 run_number，每次都是新 key，所以不再需要 cache-hit 判断；
+        # continue-on-error：缓存是加速手段，存不上不该让整轮构建判失败。
+        if: success()
+        continue-on-error: true
         uses: actions/cache/save@v5
         with:
           path: openwrt/.ccache
           key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
 
       - name: 保存工具链缓存
-        if: success() && steps.tool-restore.outputs.cache-hit != 'true'
+        if: success()
+        continue-on-error: true
         uses: actions/cache/save@v5
         with:
           path: |
@@ -397,3 +419,43 @@ jobs:
             done
           echo "清理完成，当前自动版本数：$(gh release list --limit 100 --json tagName \
             --jq '[.[] | select(.tagName | startswith("athena-"))] | length')"
+
+      - name: 清理过期缓存（每类只留最新一份）
+        # ccache / 工具链的 key 都带 run_number，每轮必然新增一条；不清理很快会撞上
+        # 仓库 10GB 缓存上限，届时 GitHub 按最久未用淘汰，可能把刚攒好的 ccache 删掉。
+        # 这里只保留本轮刚存下的 ccache、工具链，以及 dl 当前 key，其余全部删除。
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_CCACHE: ${{ steps.ccache-restore.outputs.cache-primary-key }}
+          KEEP_TOOL: ${{ steps.tool-restore.outputs.cache-primary-key }}
+          KEEP_DL: dl-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.md') }}
+        run: |
+          set -Eeuo pipefail
+          echo "保留：$KEEP_CCACHE"
+          echo "保留：$KEEP_TOOL"
+          echo "保留：$KEEP_DL"
+          mapfile -t ROWS < <(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/caches?per_page=100" \
+            --jq '.actions_caches[] | [.id, .key] | @tsv')
+          DELETED=0
+          for row in "${ROWS[@]}"; do
+            [ -n "$row" ] || continue
+            id="${row%%$'\t'*}"; key="${row#*$'\t'}"
+            case "$key" in
+              ccache-*|toolchain-*|dl-*) ;;
+              *) continue ;;
+            esac
+            [ "$key" = "$KEEP_CCACHE" ] && continue
+            [ "$key" = "$KEEP_TOOL" ] && continue
+            [ "$key" = "$KEEP_DL" ] && continue
+            if gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/caches/$id" --silent; then
+              echo "  删除 $key"; DELETED=$((DELETED + 1))
+            else
+              echo "  删除失败（跳过）$key"
+            fi
+          done
+          echo "共删除 $DELETED 条；当前缓存："
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/caches?per_page=100" \
+            --jq '.actions_caches[] | "  \(.key)  \((.size_in_bytes / 1048576) | floor) MB"'

@@ -234,6 +234,15 @@ emit() {
   printf 'CONFIG_LUCI_LANG_zh_Hans=y\n'
   # 编译加速：ccache 会跳过已编译过的相同目标。CI 上由 actions/cache 持久化，
   # 本地构建需先装 ccache（apt install ccache），否则 make 会报找不到 ccache。
+  #
+  # DEVEL 必须先开：config/Config-devel.in 里 CCACHE 的定义是
+  #   config CCACHE
+  #       bool "Use ccache" if DEVEL
+  # 没有 CONFIG_DEVEL=y 时这一项的提示被隐藏，make defconfig 会把
+  # CONFIG_CCACHE=y 当成未知符号**静默丢弃**（2026-11-17 才查清：连续几版
+  # 保存出来的 ccache 只有 15KB 统计文件，编译全程没走缓存）。
+  # DEVEL 只是把开发者选项的提示显示出来，各项默认值不变，不影响固件内容。
+  printf 'CONFIG_DEVEL=y\n'
   printf 'CONFIG_CCACHE=y\n'
 
   printf '# ---- 包 ----\n'

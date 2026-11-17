@@ -70,6 +70,13 @@ jobs:
             echo "::error::检测到 8devices 设备被选中，目标已漂移"; grep -E '^CONFIG_TARGET_DEVICE_' .config || true; exit 1
           fi
           echo "[设备护栏] 目标 = 雅典娜（jdcloud_re-cs-02），确认无误"
+          # ---- 加速护栏：CCACHE 的提示受 CONFIG_DEVEL 控制，DEVEL 没开就会被
+          #      defconfig 静默丢弃，编译照常成功但全程不走缓存（2026-11-17 查清）----
+          grep -qx 'CONFIG_DEVEL=y' .config \
+            || { echo "::error::CONFIG_DEVEL 丢失，ccache 会连带失效"; exit 1; }
+          grep -qx 'CONFIG_CCACHE=y' .config \
+            || { echo "::error::CONFIG_CCACHE 未生效（该选项的提示由 CONFIG_DEVEL 控制）"; exit 1; }
+          echo "[加速护栏] ccache = 已启用（DEVEL + CCACHE 均在 .config 中）"
 
       - name: 校验 required 包（编译前）
         run: bash scripts/check-packages.sh --config openwrt/.config --features configs/features.md
