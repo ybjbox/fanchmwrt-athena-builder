@@ -240,7 +240,9 @@ OUT="$(cat "$RT/notes.md")"
 expect_not "不再罗列小分区 uboot / 分区余量" "小分区 uboot"
 expect_not "不再罗列默认管理地址与密码说明" "默认管理地址"
 expect_not "不再罗列定时重启说明" "定时重启不预置"
-expect_has "含启用功能清单" "启用 18 项"
+# 启用项数从表里现取：以后改开关不用同步改这句断言
+ON_N=$(awk -F'|' 'NF>=7 && $3 ~ /^ *1 *$/ {c++} END{print c+0}' "$FEATURES")
+expect_has "含启用功能清单" "启用 $ON_N 项"
 expect_has "含刷机用途说明" "首次刷机"
 expect_line "自动化读取区保留 upstream-commit（定时 gate 依赖）" "upstream-commit: 8f3a2b1c9d4e"
 NROWS=$(printf '%s\n' "$OUT" | grep -c '^| `openwrt-x')

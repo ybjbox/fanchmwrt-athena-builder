@@ -146,7 +146,7 @@ tests/                               146 条回归断言（18 包校验 + 22 版
 | | 内容 | 谁维护 |
 |---|---|---|
 | `configs/required-packages.txt` | 16 个固定底座包（fwx 内核与页面、`luci-compat`、4 个无线包） | 换 FanchmWrt 版本线时才核对 |
-| `--list-required` | 当前 39 项，全部来自 `features.md` 的**启用行** | 改开关自动变化 |
+| `--list-required` | 当前 35 项，全部来自 `features.md` 的**启用行** | 改开关自动变化 |
 
 `check-packages.sh --features configs/features.md` 把两者合并去重，编译前（查 `.config`）和编译后（查 manifest）两道校验共用同一份清单，日志里会打印「固定底座 16 项 + 开关表自动派生 N 项」。
 
@@ -156,7 +156,7 @@ tests/                               146 条回归断言（18 包校验 + 22 版
 
 ### 当前基线与旧仓的差异
 
-`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**19 条启用、2 条关闭**，39 个包、9 个 git 源 + 1 个 `gitdir` 单目录。
+`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**16 条启用、4 条关闭**，35 个包、9 个 git 源 + 1 个 `gitdir` 单目录。
 
 五处**刻意不照搬**：
 
