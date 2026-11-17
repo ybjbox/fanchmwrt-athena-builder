@@ -95,6 +95,20 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "上游 $SOURCE_REF = $SHA"
 
+      - name: 计算配置指纹（缓存 key 用）
+        id: cfgfp
+        run: |
+          # 缓存 key 只跟"真正影响固件的东西"走：生成出来的配置片段 + 生成器本身。
+          # 早先用 hashFiles 对 features.md 取哈希，改一行注释也会让 4GB 缓存作废
+          # （2026-11-18 就是这么丢掉 ccache/dl/工具链的），这里改成按产物取哈希。
+          FP="$({
+            bash scripts/gen-config.sh --features configs/features.md
+            cat configs/required-packages.txt 2>/dev/null || true
+            cat scripts/gen-config.sh
+          } | sha256sum | cut -c1-16)"
+          echo "hash=$FP" >> "$GITHUB_OUTPUT"
+          echo "配置指纹: $FP"
+
       - name: 释放磁盘空间
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -126,9 +140,9 @@ jobs:
           # 每次换新 key + restore-keys 前缀兜底，等于「接着上一版继续攒」，
           # 旧条目由末尾的「清理过期缓存」步骤删掉，始终只留最新一份。
           path: openwrt/.ccache
-          key: ccache-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.md') }}-v3-${{ github.run_number }}
+          key: ccache-${{ env.SOURCE_REF }}-${{ steps.cfgfp.outputs.hash }}-v3-${{ github.run_number }}
           restore-keys: |
-            ccache-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.md') }}-v3-
+            ccache-${{ env.SOURCE_REF }}-${{ steps.cfgfp.outputs.hash }}-v3-
             ccache-${{ env.SOURCE_REF }}-
 
       - name: 恢复工具链缓存（host + 交叉工具链）
@@ -142,7 +156,7 @@ jobs:
             openwrt/build_dir/toolchain-*
             openwrt/staging_dir/host
             openwrt/staging_dir/toolchain-*
-          key: toolchain-${{ env.SOURCE_REF }}-${{ steps.upstream.outputs.sha }}-${{ hashFiles('configs/features.md') }}-v2-${{ github.run_number }}
+          key: toolchain-${{ env.SOURCE_REF }}-${{ steps.upstream.outputs.sha }}-${{ steps.cfgfp.outputs.hash }}-v2-${{ github.run_number }}
           restore-keys: |
             toolchain-${{ env.SOURCE_REF }}-${{ steps.upstream.outputs.sha }}-
 
@@ -294,7 +308,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: openwrt/dl
-          key: dl-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.md') }}
+          key: dl-${{ env.SOURCE_REF }}-${{ steps.cfgfp.outputs.hash }}
           restore-keys: |
             dl-${{ env.SOURCE_REF }}-
 
@@ -479,7 +493,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           KEEP_CCACHE: ${{ steps.ccache-restore.outputs.cache-primary-key }}
           KEEP_TOOL: ${{ steps.tool-restore.outputs.cache-primary-key }}
-          KEEP_DL: dl-${{ env.SOURCE_REF }}-${{ hashFiles('configs/features.md') }}
+          KEEP_DL: dl-${{ env.SOURCE_REF }}-${{ steps.cfgfp.outputs.hash }}
         run: |
           set -Eeuo pipefail
           echo "保留：$KEEP_CCACHE"

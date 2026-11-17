@@ -194,15 +194,16 @@ FanchmWrt 用的是官方 `openwrt/luci`（104 个应用），不带这个应用
 
 | 缓存 | 缓存内容 | 失效条件 | 预计收益（第二次起） |
 |---|---|---|---|
-| `dl` | 源码包下载目录 `openwrt/dl` | `features.md` 变化 | 省掉重复下载（已生效） |
+| `dl` | 源码包下载目录 `openwrt/dl` | 配置指纹变化 | 省掉重复下载（已生效） |
 | `ccache` | `openwrt/.ccache`（OpenWrt 强制指定此路径，不能用别处；上限 3G） | 基本不失效：每轮接着上一版继续攒 | **30–60 分钟** |
-| 工具链 | `build_dir/host`、`build_dir/toolchain-*`、`staging_dir/host`、`staging_dir/toolchain-*` | 上游 commit 或 `features.md` 变化 | **20–30 分钟** |
+| 工具链 | `build_dir/host`、`build_dir/toolchain-*`、`staging_dir/host`、`staging_dir/toolchain-*` | 上游 commit 或配置指纹变化 | **20–30 分钟** |
 
 设计要点：
 
 - **只复用编译产物，不改固件内容**：缓存失效最坏退化为全量编译，不会产出错误固件。
 - **ccache 必须先开 `CONFIG_DEVEL=y`**：`config CCACHE` 的定义是 `bool "Use ccache" if DEVEL`，只写 `CONFIG_CCACHE=y` 会被 `make defconfig` 当未知符号静默丢弃——编译照常成功，缓存却只有 15KB 统计文件（2026-11-17 实测踩到）。`gen-config.sh` 现在两行都写，流水线里还有一道护栏断言，缺了就当场报错。
 - **工具链缓存的 key 带上游 commit**（`git ls-remote` 解析前 12 位）：上游一更新自动失效，避免新旧源码混用。
+- **key 里的「配置指纹」按产物算，不按 `features.md` 原文算**：早先用 `hashFiles` 直接哈希那个文件，改一行注释也会让 4GB 缓存白丢（2026-11-18 实际发生）。现在指纹 = 生成出来的 `.config` 片段 + `required-packages.txt` + `gen-config.sh` 的 SHA-256 前 16 位，只有真正影响固件的改动才会换 key。
 - **每类缓存只留一份**：GitHub 的同名缓存不允许覆盖，key 固定会导致第一次存下后永远 `cache-hit`、新编译的对象再也存不进去。所以 ccache / 工具链的 key 都带 `github.run_number`，每轮新增一条、靠 `restore-keys` 前缀接着上一版，末尾「清理过期缓存」按前缀删掉旧的（`dl` 保留当前 key）。缓存保存失败不影响构建（`continue-on-error`）。
 - **只在构建成功时保存**（`if: success()`）：失败不会把半成品写进缓存。
 - 仓库缓存上限 10GB：`dl` 约 2.1GB + 工具链约 1.2GB + ccache 约 3GB，合计约 6.3GB，留足余量。
