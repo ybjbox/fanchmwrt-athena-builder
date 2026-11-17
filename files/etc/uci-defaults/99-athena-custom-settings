@@ -170,7 +170,8 @@ if [ "${ATHENA_NGINX_HTTP_ONLY:-1}" = "1" ] && [ -f "$NGINX_UCI" ]; then
   uci -q add_list nginx._lan.listen='80 default_server' 2>/dev/null || true
   # 固件若保留了 IPv6 监听（_lan 里有 [::]:443），80 也补一条保持对称；
   # 没保留就不加，避免在关掉 IPv6 的环境里让 nginx 绑不上 [::] 而起不来。
-  if uci -q get nginx._lan.listen 2>/dev/null | grep -q '\[::\]'; then
+  # 这里只匹配 `::`：BusyBox 的 BRE 对 `\[` 转义处理有差异，不冒险。
+  if uci -q get nginx._lan.listen 2>/dev/null | grep -q '::'; then
     uci -q add_list nginx._lan.listen='[::]:80 default_server' 2>/dev/null || true
   fi
   uci -q commit nginx 2>/dev/null || true
