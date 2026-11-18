@@ -174,6 +174,10 @@ jobs:
         # 真实模板被替换过之后就测不出「Secret 没配」这类场景了。
         run: bash tests/run-defaults-tests.sh
 
+      - name: 回归测试（默认包精简）
+        # 纯文本操作，秒级完成：验证 wol / ddns 确实从上游默认列表里被删掉
+        run: bash tests/run-prune-tests.sh
+
       - name: 注入 Secrets 到默认配置
         env:
           PPPOE_USERNAME: ${{ secrets.PPPOE_USERNAME }}

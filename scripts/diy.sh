@@ -80,7 +80,14 @@ if [ -d package/luci-app-athena-led ]; then
            package/luci-app-athena-led/root/usr/sbin/athena-led 2>/dev/null || true
 fi
 
-# ── 5. LuCI 浏览器标签标题 ──
+# ── 5. 精简上游默认包 ──
+# FanchmWrt 把 luci-app-wol / luci-app-ddns 写进了 DEFAULT_PACKAGES.router，
+# 只要设备类型是 router 就无条件装进来，features.md 根本管不到它们。
+# Lucky 自带 WOL 与 DDNS，这两项纯重复，直接从源头删（连带 etherwake、i18n）。
+# 编译前后 forbidden-packages.txt 还有一道拦截，防止被别的包重新拉回来。
+bash "$SCRIPT_DIR/prune-defaults.sh" .
+
+# ── 6. LuCI 浏览器标签标题 ──
 # 主题把 <title>FanchmWrt</title> 写死在 header.ut 里，首启改 hostname 不会
 # 让标签跟着变。这里在编译前改源码：标题读 boardinfo.hostname（首启设为
 # Athena），以后在网页里改主机名，标签也同步。

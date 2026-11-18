@@ -94,6 +94,11 @@
 
 ## 基础功能：旧仓没开、按需补上
 
+> 坑：`upnp` 与 `autoreboot` 在上游 `include/target.mk` 的默认包列表里本来就有，
+> 这两行写 `1` 只是重复点名；改成 `0` **不会**把它们从固件里删掉。
+> 真要移除，得加进 `scripts/prune-defaults.sh` 的名单（`luci-app-wol` 和
+> `luci-app-ddns` 就是这么删的），并在 `configs/forbidden-packages.txt` 登记拦截。
+
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
 |---|---|---|---|---|---|
 | upnp | 1 | 0 | luci-app-upnp | | 端口自动映射（游戏机 / BT 下载用）。注意：等于允许局域网设备自行开洞，与行为管理方向相反 |

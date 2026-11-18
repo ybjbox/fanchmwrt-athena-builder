@@ -39,6 +39,17 @@ turboacc
 luci-app-wrtbwmon
 wrtbwmon
 
+# ── 与 Lucky 重复的功能：WOL 与 DDNS 都由 Lucky 负责，不再装第二套 ──
+# 来源：上游 include/target.mk 的 DEFAULT_PACKAGES.router 无条件带进来，
+# 由 scripts/prune-defaults.sh 在 defconfig 之前删除。
+# 要恢复某一项：删掉这里的条目，再从 prune 脚本的默认名单里去掉。
+luci-app-wol
+luci-i18n-wol-zh-cn
+luci-app-ddns
+luci-i18n-ddns-zh-cn
+ddns-scripts
+ddns-scripts-services
+
 [warn]
 
 # 旧包过滤体系：25.12 已是 fw4/nftables，出现说明有插件把它拉进来了
@@ -48,6 +59,9 @@ ip6tables
 # SQM 与硬件/软件 offload 互斥，装了也别开
 luci-app-sqm
 sqm-scripts
+
+# luci-app-wol 的依赖，已随它一起移除；单独出现说明有别的包想用命令行唤醒
+etherwake
 
 # 第三方主题：fwx 页面自带 common.css，换主题不会崩，但视觉会不统一
 luci-theme-argon
