@@ -177,6 +177,13 @@ HDR
 run_defaults() {
   local tag="$1" s2="$2" s5="$3" pw="$4" skip="${5:-}"
   local root="$WORK/$tag"
+  # 升级保护：标记必须指到本 tag 的临时目录，否则会往真实的 /etc/config/athena 写。
+  # FORCE 默认 1，让 t1-t17 保持「每次都真执行」的语义（幂等测的是重复执行，
+  # 不是「第二次直接跳过」）；升级保护本身另由 t18-t21 覆盖。
+  # 用局部变量而不是 export：export 会把第一次的路径钉死成全局值，
+  # 后面的 tag 全部写到第一个目录去（踩过）。
+  local marker="$root/athena"
+  local force="${ATHENA_FIRSTBOOT_FORCE:-1}"
   mkdir -p "$root"
   if [ -n "$skip" ]; then
     sed -e "s|__MY_WIFI_SSID_2G__|$s2|g" \
@@ -203,7 +210,8 @@ run_defaults() {
   # 标签标题段：header.ut 也给一份假的
   export ATHENA_LUCI_HEADER="$root/header.ut"
   seed_header "$ATHENA_LUCI_HEADER"
-  PATH="$BIN:$PATH" $SH "$root/script" > /dev/null 2>&1 < /dev/null
+  ATHENA_FIRSTBOOT_MARKER="$marker" ATHENA_FIRSTBOOT_FORCE="$force" \
+    PATH="$BIN:$PATH" $SH "$root/script" > /dev/null 2>&1 < /dev/null
   RC=$?
 }
 
@@ -317,6 +325,8 @@ ATHENA_NGINX_UCI="$root/no-such-nginx" \
 ATHENA_NGINX_LOCATIONS="$root/no-such-locations" \
 ATHENA_NGINX_BIN="$BIN/nginx-ok" \
 ATHENA_LUCI_HEADER="$root/no-such-header" \
+ATHENA_FIRSTBOOT_MARKER="$root/athena" \
+ATHENA_FIRSTBOOT_FORCE=1 \
   PATH="$BIN:$PATH" $SH "$root/script" > /dev/null 2>&1 < /dev/null
 DB="$UCI_DB"
 expect_eq "没有配置文件时不写 listen" \
@@ -427,6 +437,113 @@ if grep -q '预编译字节码' "$WORK/t17/log.txt"; then
   ok "留下字节码跳过日志"
 else
   bad "留下字节码跳过日志" "$(cat "$WORK/t17/log.txt")"
+fi
+
+# ══ t18 首次执行：写入升级保护标记 ══
+echo "== t18 首次执行写入 /etc/config/athena 标记 =="
+run_defaults t18 "Athena_2G" "Athena_5G" "Passw0rd123"
+MARK18="$WORK/t18/athena"
+if [ -f "$MARK18" ]; then ok "标记文件已生成"; else bad "标记文件未生成"; fi
+if grep -q "config athena 'firstboot'" "$MARK18" 2>/dev/null; then
+  ok "标记是合法的 UCI 段"
+else
+  bad "标记是合法的 UCI 段" "$(cat "$MARK18" 2>/dev/null)"
+fi
+if grep -q "option applied '1'" "$MARK18" 2>/dev/null; then
+  ok "标记记录了 applied=1"
+else
+  bad "标记记录了 applied=1" "$(cat "$MARK18" 2>/dev/null)"
+fi
+if grep -q '已写入升级保护标记' "$WORK/t18/log.txt"; then
+  ok "留下写入标记日志"
+else
+  bad "留下写入标记日志" "$(cat "$WORK/t18/log.txt")"
+fi
+
+# ══ t19 标记存在：整体跳过，一个配置都不许动 ══
+# 手工铺「用户已经配好的现场」，模拟保留配置升级后配置已还原的样子。
+echo "== t19 标记存在 → 跳过，不覆盖用户配置 =="
+root="$WORK/t19"
+mkdir -p "$root"
+sed -e "s|__MY_WIFI_SSID_2G__|Athena_2G|g" \
+    -e "s|__MY_WIFI_SSID_5G__|Athena_5G|g" \
+    -e "s|__MY_WIFI_PASSWORD__|Passw0rd123|g" "$SCRIPT" > "$root/script"
+# 用户自建的配置：SSID 改过、LAN 换过网段、还加了一条静态租约
+: > "$root/uci"
+printf 'wireless.radio0=wifi-device\n' >> "$root/uci"
+printf 'wireless.@wifi-iface0=wifi-iface\n' >> "$root/uci"
+printf 'wireless.@wifi-iface0.device=radio0\n' >> "$root/uci"
+printf 'wireless.@wifi-iface0.mode=ap\n' >> "$root/uci"
+printf 'wireless.@wifi-iface0.ssid=MyHomeWiFi\n' >> "$root/uci"
+printf 'wireless.radio0.band=2g\n' >> "$root/uci"
+printf 'network.lan.ipaddr=192.168.9.1\n' >> "$root/uci"
+printf 'dhcp.@host[0].name=nas\n' >> "$root/uci"
+# 标记已存在（上一次首启写的）
+printf "config athena 'firstboot'\n\toption applied '1'\n" > "$root/athena"
+UCI_DB="$root/uci" LOG_FILE="$root/log.txt" \
+ATHENA_FIRSTBOOT_MARKER="$root/athena" ATHENA_FIRSTBOOT_FORCE=0 \
+ATHENA_NGINX_UCI="$root/nginx" ATHENA_NGINX_LOCATIONS="$root/luci.locations" \
+ATHENA_NGINX_BIN="$BIN/nginx-ok" ATHENA_LUCI_HEADER="$root/header.ut" \
+  PATH="$BIN:$PATH" $SH "$root/script" > /dev/null 2>&1 < /dev/null
+DB="$root/uci"
+expect_eq "用户 SSID 未被覆盖" "MyHomeWiFi" "$(get_db "$DB" wireless.@wifi-iface0.ssid)"
+expect_eq "用户 LAN 网段未被覆盖" "192.168.9.1" "$(get_db "$DB" network.lan.ipaddr)"
+expect_eq "静态租约未被冲掉" "nas" "$(get_db "$DB" dhcp.@host[0].name)"
+expect_eq "没有写入主机名默认值" "" "$(get_db "$DB" system.@system0.hostname)"
+expect_eq "没有写 nginx 的 80 监听" "" "$(get_db "$DB" nginx._lan.listen)"
+if [ -f "$root/luci.locations" ]; then
+  bad "跳过时不动 nginx location 文件"
+else
+  ok "跳过时不动 nginx location 文件"
+fi
+if [ -f "$root/header.ut" ]; then
+  bad "跳过时不动 header.ut"
+else
+  ok "跳过时不动 header.ut"
+fi
+if grep -q '判定为保留配置升级，跳过默认值写入' "$root/log.txt"; then
+  ok "日志说明跳过原因"
+else
+  bad "日志说明跳过原因" "$(cat "$root/log.txt")"
+fi
+
+# ══ t20 FORCE=1：标记存在也强制重跑 ══
+echo "== t20 ATHENA_FIRSTBOOT_FORCE=1 → 标记存在也强制执行 =="
+root="$WORK/t20"
+mkdir -p "$root"
+sed -e "s|__MY_WIFI_SSID_2G__|Athena_2G|g" \
+    -e "s|__MY_WIFI_SSID_5G__|Athena_5G|g" \
+    -e "s|__MY_WIFI_PASSWORD__|Passw0rd123|g" "$SCRIPT" > "$root/script"
+: > "$root/uci"
+printf 'wireless.radio0=wifi-device\n' >> "$root/uci"
+printf 'wireless.@wifi-iface0=wifi-iface\n' >> "$root/uci"
+printf 'wireless.@wifi-iface0.device=radio0\n' >> "$root/uci"
+printf 'wireless.@wifi-iface0.mode=ap\n' >> "$root/uci"
+printf 'wireless.@wifi-iface0.ssid=MyHomeWiFi\n' >> "$root/uci"
+printf 'wireless.radio0.band=2g\n' >> "$root/uci"
+printf 'network.lan.ipaddr=192.168.9.1\n' >> "$root/uci"
+printf "config athena 'firstboot'\n\toption applied '1'\n" > "$root/athena"
+UCI_DB="$root/uci" LOG_FILE="$root/log.txt" \
+ATHENA_FIRSTBOOT_MARKER="$root/athena" ATHENA_FIRSTBOOT_FORCE=1 \
+ATHENA_NGINX_UCI="$root/no-nginx" ATHENA_NGINX_LOCATIONS="$root/no-loc" \
+ATHENA_NGINX_BIN="$BIN/nginx-ok" ATHENA_LUCI_HEADER="$root/no-hdr" \
+  PATH="$BIN:$PATH" $SH "$root/script" > /dev/null 2>&1 < /dev/null
+DB="$root/uci"
+expect_eq "强制模式下 SSID 按默认值重写" "Athena_2G" "$(get_db "$DB" wireless.@wifi-iface0.ssid)"
+expect_eq "强制模式下 LAN 按默认值重写" "10.0.0.1" "$(get_db "$DB" network.lan.ipaddr)"
+expect_eq "强制模式下主机名写成 Athena" "Athena" "$(get_db "$DB" system.@system0.hostname)"
+
+# ══ t21 静态检查：默认标记必须落在 /etc/config 下 ══
+echo "== t21 标记默认路径必须在 /etc/config（才会随备份保留） =="
+if grep -q 'ATHENA_FIRSTBOOT_MARKER:-/etc/config/athena' "$SCRIPT"; then
+  ok "默认标记是 /etc/config/athena"
+else
+  bad "默认标记是 /etc/config/athena" "$(grep -n 'ATHENA_FIRSTBOOT_MARKER' "$SCRIPT")"
+fi
+if grep -q 'ATHENA_FIRSTBOOT_FORCE' "$SCRIPT"; then
+  ok "提供强制重跑开关"
+else
+  bad "提供强制重跑开关"
 fi
 
 echo

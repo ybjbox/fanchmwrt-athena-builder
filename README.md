@@ -188,6 +188,44 @@ tests/                               152 条回归断言（18 包校验 + 22 版
 
 `gitdir:` 机制仍保留在 `gen-config.sh` / `diy.sh` 中，以后要从别的大仓取单个应用目录时仍可用。
 
+### 保留配置升级（sysupgrade）
+
+**2026-11-18 实测问题**：网页上勾「保留配置」升级，重启后配置全丢（Lucky 里的反代域名都不在了），界面却全程显示成功。
+
+根因不在操作，而在这一版固件的目标平台脚本缺了一个函数。sysupgrade 保留配置是三步：
+
+1. `/sbin/sysupgrade` 把 `/etc/config` 等打成 `$UPGRADE_BACKUP`（落在 `/tmp`）
+2. 写完固件后，`lib/upgrade/do_stage2` 调 `platform_copy_config` 把包落地到 eMMC 配置区
+3. 重启时 preinit 从 `/sysupgrade.tgz` 解包还原
+
+第 2 步的调用带条件：
+
+```sh
+if [ -n "$UPGRADE_BACKUP" ] && type 'platform_copy_config' >/dev/null 2>&1; then
+	platform_copy_config
+fi
+```
+
+`target/linux/qualcommax/ipq60xx/base-files/lib/upgrade/platform.sh` 里**没有**这个函数，于是整步被静默跳过，备份包留在 `/tmp` 随 `reboot -f` 蒸发。上游 `openwrt/openwrt` 同名文件有，两份文件除这 12 行外完全一致。
+
+修复：`scripts/patch-upgrade.sh` 在编译前按上游原文追加该函数（幂等、`sh -n` 自检、补完与上游逐字一致）。`diy.sh` 第 6 段调用。
+
+**生效顺序（容易误解）**：执行 sysupgrade 的是**当前正在运行的固件**，所以
+
+```
+旧固件 →（配置仍会丢）→ 带补丁的固件 →（配置保留）→ 之后的每一版
+```
+
+补丁救不回刷入补丁版之前丢掉的那次配置。
+
+配套的另一半在首启脚本：`99-athena-custom-settings` 是 uci-defaults，每次刷机都会重跑。即使备份还原成功，它也会把主机名、LAN IP、IPv6 开关、WiFi 名称与密码、root 口令按编译期默认值重写一遍，症状同样是「配置没保留」。
+
+所以脚本开头加了判据：`/etc/config/athena` 存在就整体跳过（该文件在 `/etc/config` 下，实测 `sysupgrade -b` 会把整个目录打进备份包，共 67 个文件）。首次安装时文件不存在 → 正常执行 → 末尾写入标记。
+
+- 想按出厂默认强制重跑（例如改了 Secrets 里的 WiFi 密码后重刷）：`ATHENA_FIRSTBOOT_FORCE=1`
+- 「不保留配置」刷机不受影响：overlay 被重建，标记一起没了，首启照常执行
+- 标记内容：`config athena 'firstboot'` + `option applied '1'` + `option applied_release`（写入时的固件版本）
+
 ## 编译加速（三层缓存）
 
 完整构建约 2.5 小时，**编译占 98%**（实测 2h21m / 2h24m），其余步骤合计不到 3 分钟。因此缓存全部打在编译链上：

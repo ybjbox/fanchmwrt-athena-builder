@@ -21,6 +21,27 @@ valid() {
 
 log() { logger -t athena-defaults "$*" 2>/dev/null || true; }
 
+# ── 升级保护：已经配过的机器不再覆盖 ──
+# 本脚本是 uci-defaults，每次刷机、每次开机（只要文件还在）都会重跑。
+# 「保留配置」升级时 /etc/config 已经由 preinit 从备份还原回来，此时再把
+# 主机名、LAN IP、IPv6 开关、WiFi 名称与密码、root 口令按编译期默认值写一遍，
+# 结果就是「配置看起来没保留」——用户改过的 SSID、口令全被冲掉。
+#
+# 判据用 /etc/config/athena 这个标记文件：
+#   - 它在 /etc/config 下，实测 sysupgrade -b 会把整个目录打进备份包（67 个文件），
+#     所以保留配置升级时它跟着回来；
+#   - 首次安装时文件不存在 → 正常执行 → 末尾写入；
+#   - 想强制按出厂默认重跑（例如改了 Secrets 里的 WiFi 密码后重刷）：
+#     ATHENA_FIRSTBOOT_FORCE=1
+#
+# 注意这不影响「不保留配置」刷机：那种情况下 overlay 被重建，标记文件一起没了，
+# 首启照常执行，行为与以前一致。
+MARKER="${ATHENA_FIRSTBOOT_MARKER:-/etc/config/athena}"
+if [ "${ATHENA_FIRSTBOOT_FORCE:-0}" != "1" ] && [ -f "$MARKER" ]; then
+  log "检测到 $MARKER，判定为保留配置升级，跳过默认值写入（强制重跑：ATHENA_FIRSTBOOT_FORCE=1）"
+  exit 0
+fi
+
 # ── 0. SSID 红线 ──
 # SSID 是明文广播的：一旦某个 SSID 变量装的是 WiFi 密码，密码就等于
 # 公开贴在空气里。Secret 填错位（把密码粘到 WIFI_SSID_5G 一栏）时症状
@@ -272,5 +293,18 @@ uci commit network
 uci commit dhcp
 uci commit system
 uci commit luci 2>/dev/null || true
+
+# ── 写入升级保护标记（必须放在最后）──
+# 只有走完上面所有段才落这个文件。下次刷机若勾了「保留配置」，/etc/config 会被
+# preinit 整份还原（含本文件），脚本开头的判据就会命中原样退出，不再覆盖。
+# 记下写入时的固件版本，方便排查「这次升级为什么跳过」。
+REL="$(. /etc/openwrt_release 2>/dev/null && printf '%s' "${DISTRIB_DESCRIPTION:-}")"
+mkdir -p "$(dirname "$MARKER")" 2>/dev/null || true
+{
+  printf "config athena 'firstboot'\n"
+  printf "\toption applied '1'\n"
+  printf "\toption applied_release '%s'\n" "${REL:-unknown}"
+} > "$MARKER" 2>/dev/null || log "写入升级保护标记失败：$MARKER（下次刷机会再次覆盖默认值）"
+log "已写入升级保护标记：$MARKER${REL:+（$REL）}"
 
 exit 0

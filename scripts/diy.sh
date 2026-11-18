@@ -87,7 +87,13 @@ fi
 # 编译前后 forbidden-packages.txt 还有一道拦截，防止被别的包重新拉回来。
 bash "$SCRIPT_DIR/prune-defaults.sh" .
 
-# ── 6. LuCI 浏览器标签标题 ──
+# ── 6. 补 platform_copy_config（让「保留配置」升级真的生效）──
+# 该 target 的 platform.sh 缺这个函数，而 do_stage2 是有条件调用：
+# 函数不存在就静默跳过，备份包被扔在 /tmp 随重启蒸发，网页仍显示升级成功。
+# 补丁内容与上游 openwrt 逐字一致，只动这一个文件。
+bash "$SCRIPT_DIR/patch-upgrade.sh" "$PWD"
+
+# ── 7. LuCI 浏览器标签标题 ──
 # 主题把 <title>FanchmWrt</title> 写死在 header.ut 里，首启改 hostname 不会
 # 让标签跟着变。这里在编译前改源码：标题读 boardinfo.hostname（首启设为
 # Athena），以后在网页里改主机名，标签也同步。

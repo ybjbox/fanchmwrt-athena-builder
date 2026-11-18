@@ -178,6 +178,11 @@ jobs:
         # 纯文本操作，秒级完成：验证 wol / ddns 确实从上游默认列表里被删掉
         run: bash tests/run-prune-tests.sh
 
+      - name: 回归测试（升级保留配置补丁）
+        # 秒级：验证 platform_copy_config 按上游原文补上、幂等、且不破坏语法。
+        # 补不上就是「勾了保留配置也会丢」，必须在编译前拦住。
+        run: bash tests/run-upgrade-tests.sh
+
       - name: 注入 Secrets 到默认配置
         env:
           PPPOE_USERNAME: ${{ secrets.PPPOE_USERNAME }}
