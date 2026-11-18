@@ -86,11 +86,13 @@ esac
 exit 0
 STUB
 
-# ── 桩：wifi / logger / passwd ──
+# ── 桩：wifi / logger / passwd / nginx ──
 printf '#!/bin/sh\nexit 0\n' > "$BIN/wifi"
 printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "${LOG_FILE:-/dev/null}"\nexit 0\n' > "$BIN/logger"
 printf '#!/bin/sh\ncat > /dev/null 2>&1\nexit 0\n' > "$BIN/passwd"
-chmod +x "$BIN/uci" "$BIN/wifi" "$BIN/logger" "$BIN/passwd"
+printf '#!/bin/sh\nexit 0\n' > "$BIN/nginx-ok"
+printf '#!/bin/sh\nexit 1\n' > "$BIN/nginx-bad"
+chmod +x "$BIN/uci" "$BIN/wifi" "$BIN/logger" "$BIN/passwd" "$BIN/nginx-ok" "$BIN/nginx-bad"
 
 # 假设备：radio0=2.4G，radio1/radio2=5G，三个 AP 接口
 seed_wireless() { # <db>
@@ -132,6 +134,23 @@ seed_nginx() { # <db>
   printf 'nginx._redirect2ssl.listen=80|[::]:80\n'                  >> "$1"
 }
 
+# 假设备：LuCI 的 nginx location 文件 —— 反代被 302 到 http://域名/cgi-bin/luci/ 的现场
+# 只在文件不存在时铺一份，便于同一 tag 重复执行验证幂等。
+seed_locations() { # <path>
+  [ -f "$1" ] && return 0
+  cat > "$1" <<'LOC'
+location = / {
+		return 302 /cgi-bin/luci/;
+}
+location /cgi-bin/luci {
+		index  index.html;
+		include uwsgi_params;
+		uwsgi_modifier1 9;
+		uwsgi_pass unix:////var/run/luci-webui.socket;
+}
+LOC
+}
+
 # run_defaults <tag> <ssid2g> <ssid5g> <pass> [skip5g]
 #   skip5g 非空时保留 __MY_WIFI_SSID_5G__ 占位符，模拟该 Secret 没配
 run_defaults() {
@@ -154,6 +173,12 @@ run_defaults() {
   seed_nginx "$UCI_DB"
   export ATHENA_NGINX_UCI="$root/nginx"
   : > "$ATHENA_NGINX_UCI"
+  # 相对重定向段：location 文件 + nginx 桩（-t 校验）都可控
+  export ATHENA_NGINX_LOCATIONS="$root/luci.locations"
+  seed_locations "$ATHENA_NGINX_LOCATIONS"
+  export ATHENA_NGINX_BIN="${ATHENA_TEST_NGINX_BIN:-$BIN/nginx-ok}"
+  export ATHENA_NGINX_CONF="$root/nginx.conf"
+  : > "$ATHENA_NGINX_CONF"
   PATH="$BIN:$PATH" $SH "$root/script" > /dev/null 2>&1 < /dev/null
   RC=$?
 }
@@ -264,12 +289,65 @@ export LOG_FILE="$root/log.txt"
 : > "$LOG_FILE"
 seed_wireless "$UCI_DB"
 seed_nginx "$UCI_DB"
-ATHENA_NGINX_UCI="$root/no-such-nginx" PATH="$BIN:$PATH" \
-  $SH "$root/script" > /dev/null 2>&1 < /dev/null
+ATHENA_NGINX_UCI="$root/no-such-nginx" \
+ATHENA_NGINX_LOCATIONS="$root/no-such-locations" \
+ATHENA_NGINX_BIN="$BIN/nginx-ok" \
+  PATH="$BIN:$PATH" $SH "$root/script" > /dev/null 2>&1 < /dev/null
 DB="$UCI_DB"
 expect_eq "没有配置文件时不写 listen" \
   "443 ssl default_server|[::]:443 ssl default_server" "$(get_db "$DB" nginx._lan.listen)"
 expect_eq "没有配置文件时不删 _redirect2ssl" "server" "$(get_db "$DB" nginx._redirect2ssl)"
+
+# ══ t10 nginx 相对重定向：反代访问保留 scheme 与端口 ══
+echo "== t10 nginx 相对重定向：location 文件首行插入 absolute_redirect off =="
+LOC_FILE="$WORK/t1/luci.locations"
+expect_eq "首行是 absolute_redirect off" "absolute_redirect off;" "$(head -n 1 "$LOC_FILE")"
+if grep -q 'location = / {' "$LOC_FILE"; then
+  ok "原有 location 块未被破坏"
+else
+  bad "原有 location 块未被破坏" "$(cat "$LOC_FILE")"
+fi
+if grep -q 'return 302 /cgi-bin/luci/;' "$LOC_FILE"; then
+  ok "302 目标仍是相对路径 /cgi-bin/luci/"
+else
+  bad "302 目标仍是相对路径 /cgi-bin/luci/"
+fi
+if grep -q 'nginx 重定向已改为相对路径' "$WORK/t1/log.txt"; then
+  ok "留下改动成功日志"
+else
+  bad "留下改动成功日志" "$(cat "$WORK/t1/log.txt")"
+fi
+
+# ══ t11 幂等：同一份文件重复执行不叠加 ══
+echo "== t11 重复执行不重复插入 =="
+run_defaults t11 "Athena_2G" "Athena_5G" "Passw0rd123"
+run_defaults t11 "Athena_2G" "Athena_5G" "Passw0rd123"
+CNT="$(grep -c 'absolute_redirect off' "$WORK/t11/luci.locations")"
+expect_eq "文件里只有一条 absolute_redirect off" 1 "$CNT"
+
+# ══ t12 开关关闭：一行都不许动 ══
+echo "== t12 ATHENA_NGINX_REL_REDIRECT=0 → 不动 location 文件 =="
+ATHENA_NGINX_REL_REDIRECT=0 run_defaults t12 "Athena_2G" "Athena_5G" "Passw0rd123"
+if grep -q 'absolute_redirect' "$WORK/t12/luci.locations"; then
+  bad "开关关闭时不插入" "$(head -n 1 "$WORK/t12/luci.locations")"
+else
+  ok "开关关闭时不插入"
+fi
+
+# ══ t13 校验失败：必须回滚，不能留下打不开网页的配置 ══
+echo "== t13 nginx -t 失败 → 回滚，文件保持原样 =="
+ATHENA_TEST_NGINX_BIN="$BIN/nginx-bad" run_defaults t13 "Athena_2G" "Athena_5G" "Passw0rd123"
+if grep -q 'absolute_redirect' "$WORK/t13/luci.locations"; then
+  bad "校验失败时回滚" "$(head -n 1 "$WORK/t13/luci.locations")"
+else
+  ok "校验失败时回滚"
+fi
+expect_eq "回滚后首行仍是原 location 块" "location = / {" "$(head -n 1 "$WORK/t13/luci.locations")"
+if grep -q '未通过校验，已回滚' "$WORK/t13/log.txt"; then
+  ok "留下回滚日志"
+else
+  bad "留下回滚日志" "$(cat "$WORK/t13/log.txt")"
+fi
 
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"

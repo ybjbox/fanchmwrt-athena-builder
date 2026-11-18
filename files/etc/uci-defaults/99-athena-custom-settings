@@ -196,6 +196,49 @@ if [ "${ATHENA_NGINX_HTTP_ONLY:-1}" = "1" ] && [ -f "$NGINX_UCI" ]; then
   fi
 fi
 
+# ── 10. nginx 重定向改相对路径（反代访问保留 https 与端口）──
+# 公网经反代（例如 https://op.403333.xyz:8888/）访问 LuCI，会被 302 到
+# http://op.403333.xyz/cgi-bin/luci/：scheme 降成 http、端口 8888 丢失，
+# 后台在公网就打不开了。
+# 根因在 /etc/nginx/conf.d/luci.locations 的第一条：
+#   location = / { return 302 /cgi-bin/luci/; }
+# 它写的是相对路径，但 nginx 默认 absolute_redirect on 会补成绝对地址：
+#   scheme 取本机这条连接（反代连的是 80 就是 http）
+#   端口取 $server_port（nginx 自己监听的端口，不是 Host 头里的端口）
+# 所以改 Host 头、加 X-Forwarded-Proto 都救不回来——反代端口一定丢。
+# 关掉绝对化后返回相对 Location，浏览器按地址栏 origin 解析，问题消失。
+# 局域网 http://10.0.0.1 与 443 直连的表现不变。
+# 想保留 nginx 默认行为：把下面的 ATHENA_NGINX_REL_REDIRECT 设为 0。
+NGINX_LOC="${ATHENA_NGINX_LOCATIONS:-/etc/nginx/conf.d/luci.locations}"
+NGINX_BIN="${ATHENA_NGINX_BIN:-/usr/sbin/nginx}"
+if [ "${ATHENA_NGINX_REL_REDIRECT:-1}" = "1" ] && [ -f "$NGINX_LOC" ]; then
+  if grep -q 'absolute_redirect' "$NGINX_LOC" 2>/dev/null; then
+    log "nginx 相对重定向已设置，跳过"
+  elif [ ! -x "$NGINX_BIN" ]; then
+    log "未找到 $NGINX_BIN，跳过 nginx 相对重定向设置"
+  else
+    REL_CONF="${ATHENA_NGINX_CONF:-/etc/nginx/uci.conf}"
+    cp -f "$NGINX_LOC" "$NGINX_LOC.athena-bak" 2>/dev/null || true
+    # 写临时文件再覆盖回去：不走 mv/rename，避免个别文件系统上的替换异常
+    if printf 'absolute_redirect off;\n' > "$NGINX_LOC.athena-new" 2>/dev/null &&
+       cat "$NGINX_LOC.athena-bak" >> "$NGINX_LOC.athena-new" 2>/dev/null &&
+       cat "$NGINX_LOC.athena-new" > "$NGINX_LOC" 2>/dev/null; then
+      rm -f "$NGINX_LOC.athena-new" 2>/dev/null || true
+      if "$NGINX_BIN" -t -c "$REL_CONF" -g 'daemon off;' >/dev/null 2>&1; then
+        /etc/init.d/nginx restart >/dev/null 2>&1 || true
+        log "nginx 重定向已改为相对路径：反代访问可保留 https 与端口"
+      else
+        cp -f "$NGINX_LOC.athena-bak" "$NGINX_LOC" 2>/dev/null || true
+        /etc/init.d/nginx restart >/dev/null 2>&1 || true
+        log "nginx 相对重定向改动未通过校验，已回滚"
+      fi
+    else
+      rm -f "$NGINX_LOC.athena-new" 2>/dev/null || true
+      log "nginx 相对重定向写入失败，已跳过"
+    fi
+  fi
+fi
+
 uci commit network
 uci commit dhcp
 uci commit system
