@@ -104,3 +104,4 @@
 | upnp | 1 | 0 | luci-app-upnp | | 端口自动映射（游戏机 / BT 下载用）。注意：等于允许局域网设备自行开洞，与行为管理方向相反 |
 | watchcat | 1 | 0 | luci-app-watchcat watchcat | | 定时探测网络，连续失败 N 次自动重启，治「断网后卡死」（异常自愈，与计划重启互不冲突） |
 | logrotate | 1 | 0 | logrotate | | 日志轮转，防日志写满存储。微信推送、行为管理都会写日志 |
+| ttyd | 1 | 0 | luci-app-ttyd ttyd luci-i18n-ttyd-zh-cn | | 网页终端，装完在「服务 → 终端」。监听 7681；公网走 https 时 iframe 会被混合内容拦，需在 Lucky 单独反代后把「URL override」填成那个地址 |
