@@ -51,7 +51,7 @@ expect_has "启用 ccache 编译加速" "CONFIG_CCACHE=y"
 expect_has "ccache 依赖的 DEVEL 一并写入" "CONFIG_DEVEL=y"
 expect_has "策略性禁用 OAF" "# CONFIG_PACKAGE_luci-app-oaf is not set"
 expect_has "OpenClash 已启用" "CONFIG_PACKAGE_luci-app-openclash=y"
-expect_has "ImmortalWrt 定时重启已启用" "CONFIG_PACKAGE_luci-app-autoreboot=y"
+expect_not "autoreboot 不再由开关表携带（源码默认包已带）" "CONFIG_PACKAGE_luci-app-autoreboot=y"
 expect_has "mosdns 带 geoip" "CONFIG_PACKAGE_v2ray-geoip=y"
 expect_has "mosdns 带 geosite" "CONFIG_PACKAGE_v2ray-geosite=y"
 expect_not "不再输出无效的 v2ray-geodata" "CONFIG_PACKAGE_v2ray-geodata=y"
@@ -162,12 +162,11 @@ echo "== C15 点名册自动派生：改开关，清单自动跟着变 =="
 run "$GEN" --features "$FEATURES" --list-required
 expect_code "派生清单生成成功" 0
 BASE_N=$(printf '%s\n' "$OUT" | grep -c .)
-expect_line "启用行的 autoreboot 在清单里" 'luci-app-autoreboot'
 expect_line "启用行的工具包在清单里" 'htop'
 
-sed 's/^| autoreboot | 1 |/| autoreboot | 0 |/' "$FEATURES" > "$WORK/f15a.md"
+sed 's/^| logrotate | 1 |/| logrotate | 0 |/' "$FEATURES" > "$WORK/f15a.md"
 run "$GEN" --features "$WORK/f15a.md" --list-required
-expect_not "关掉 autoreboot 后清单不再要求它" 'luci-app-autoreboot'
+expect_not "关掉 logrotate 后清单不再要求它" 'logrotate'
 N_A=$(printf '%s\n' "$OUT" | grep -c .)
 if [ "$N_A" -eq "$((BASE_N - 1))" ]; then
   printf '  PASS  关一个单包开关，清单恰好少 1 行\n'; PASS=$((PASS+1))
@@ -194,16 +193,24 @@ expect_line "原本关闭的 bandix 打开后自动进清单" 'bandix'
 expect_line "同一行的第二个包也自动进清单" 'luci-app-bandix'
 
 echo "== C16 gitdir 单目录来源（不整仓拉）=="
-run "$GEN" --features "$FEATURES" --list-gitdirs
+# 真实开关表里已无 gitdir 行（autoreboot 确认是源码默认包，已删除），
+# 机制本身仍要守，用临时表验证。
+cat > "$WORK/f16.md" <<'EOF'
+| 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
+|---|---|---|---|---|---|
+| sample | 1 | 0 | luci-app-sample | gitdir:https://github.com/immortalwrt/luci#master/applications/luci-app-sample | 测试用 |
+EOF
+run "$GEN" --features "$WORK/f16.md" --list-gitdirs
 expect_code "gitdir 清单生成成功" 0
-expect_has "目标目录名" "luci-app-autoreboot"
+expect_has "目标目录名" "luci-app-sample"
 expect_has "分支" "master"
-expect_has "子目录" "applications/luci-app-autoreboot"
+expect_has "子目录" "applications/luci-app-sample"
 expect_has "仓库" "immortalwrt/luci"
-run "$GEN" --features "$FEATURES" --list-clones
+run "$GEN" --features "$WORK/f16.md" --list-clones
 expect_not "没有把 ImmortalWrt 整仓 clone" "immortalwrt/luci"
-run "$GEN" --features "$WORK/f15a.md" --list-gitdirs
-expect_not "关掉后不再取该目录" "luci-app-autoreboot"
+sed 's/^| sample | 1 |/| sample | 0 |/' "$WORK/f16.md" > "$WORK/f16off.md"
+run "$GEN" --features "$WORK/f16off.md" --list-gitdirs
+expect_not "关掉后不再取该目录" "luci-app-sample"
 
 echo "== C17 gitdir 写法错误要能拦住 =="
 cat > "$WORK/f17a.md" <<'EOF'

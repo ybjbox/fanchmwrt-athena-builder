@@ -138,7 +138,7 @@ while IFS= read -r raw || [ -n "$raw" ]; do
         ;;
       gitdir:*)
         # 只取大仓里的一个子目录：gitdir:<url>#<分支>/<子目录>
-        # 例：gitdir:https://github.com/immortalwrt/luci#master/applications/luci-app-autoreboot
+        # 例：gitdir:https://github.com/<user>/<repo>#<分支>/applications/luci-app-<名字>
         spec="${token#gitdir:}"
         case "$spec" in
           *'#'*'/'*) ;;

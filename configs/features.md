@@ -94,14 +94,13 @@
 
 ## 基础功能：旧仓没开、按需补上
 
-> 坑：`upnp` 与 `autoreboot` 在上游 `include/target.mk` 的默认包列表里本来就有，
-> 这两行写 `1` 只是重复点名；改成 `0` **不会**把它们从固件里删掉。
-> 真要移除，得加进 `scripts/prune-defaults.sh` 的名单（`luci-app-wol` 和
-> `luci-app-ddns` 就是这么删的），并在 `configs/forbidden-packages.txt` 登记拦截。
+> 坑：`upnp` 是上游 `include/target.mk` 的默认包，这里写 `1` 只是重复点名，
+> 改成 `0` 不会把它从固件里删掉。真要去掉得走 `scripts/prune-defaults.sh`，
+> 并在 `configs/forbidden-packages.txt` 登记拦截。
+> `autoreboot` 同类，源码自带，已从本表移除（原来那行 `gitdir:` 是多余的）。
 
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
 |---|---|---|---|---|---|
 | upnp | 1 | 0 | luci-app-upnp | | 端口自动映射（游戏机 / BT 下载用）。注意：等于允许局域网设备自行开洞，与行为管理方向相反 |
-| watchcat | 1 | 0 | luci-app-watchcat watchcat | | 定时探测网络，连续失败 N 次自动重启，治「断网后卡死」（异常自愈，与下面的计划重启互不冲突） |
+| watchcat | 1 | 0 | luci-app-watchcat watchcat | | 定时探测网络，连续失败 N 次自动重启，治「断网后卡死」（异常自愈，与计划重启互不冲突） |
 | logrotate | 1 | 0 | logrotate | | 日志轮转，防日志写满存储。微信推送、行为管理都会写日志 |
-| autoreboot | 1 | 0 | luci-app-autoreboot | gitdir:https://github.com/immortalwrt/luci#master/applications/luci-app-autoreboot | 网页「系统 → 定时重启」。只取 ImmortalWrt 大仓里这一个目录，不整仓拉；插件默认关闭、不预置时间，改时间不用重编固件 |

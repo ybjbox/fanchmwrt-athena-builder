@@ -12,12 +12,12 @@
 |---|---|
 | 雅典娜单机型固件 | 亚瑟 / 太乙 / x86 / ipq807x |
 | FanchmWrt snapshot 线（默认 `fanchmwrt-26.11`） | ImmortalWrt / LibWrt / 官方 OpenWrt 线 |
-| 个人 4 个插件 + 点阵屏 + ImmortalWrt 定时重启单目录 | OAF（由内置 fwx 替代） |
+| 个人 4 个插件 + 点阵屏 + 源码自带的定时重启 | OAF（由内置 fwx 替代） |
 | 包点名检查 + 版本锁 + 产物哈希 | SDK 独立分包流水线（需要时再加） |
 
 砍掉的不是能力，是组合数。要恢复多机型时，复制本仓改 `configs/features.md` 即可；`required-packages.txt` 只存固定底座包，功能包由开关表自动派生。
 
-> 源码线仍是 FanchmWrt。表格里「不做 ImmortalWrt 线」指的是**不换成它的整条源码与软件源**；`luci-app-autoreboot` 只是从它的仓库里取一个应用目录（9 个文件），用本仓官方 luci 的规则编译。
+> 源码线仍是 FanchmWrt。表格里「不做 ImmortalWrt 线」指的是**不换成它的整条源码与软件源**；`luci-app-autoreboot` 曾用 `gitdir:` 从它仓库取单目录，后确认 FanchmWrt 源码默认包列表已自带，该行已从开关表删除。
 
 ---
 
@@ -172,21 +172,17 @@ tests/                               152 条回归断言（18 包校验 + 22 版
 
 `bandix` 关掉后，流量统计只剩 `fwx` 一套（`luci-app-fwx-traffic-stat` + `luci-app-fwx-session-stat`，已在必需包清单里）；两者口径不同，同时开会出现两个数字不一致的面板，反而难判断哪个可信。
 
-### 定时重启（ImmortalWrt 插件，网页可改）
+### 定时重启（源码自带，网页可改）
 
-> 更正：早前本文件写「ImmortalWrt 也已移除 `luci-app-autoreboot`」是查错了。`immortalwrt/luci` 的 `applications/luci-app-autoreboot` 是 2025 年的新版（JS 页面 + procd 服务 + UCI 配置），官方软件仓库也提供 ipk。
-
-FanchmWrt 用的是官方 `openwrt/luci`（104 个应用），不带这个应用。构建时用 `gitdir:` **只取这一个目录**（9 个文件）放进 `package/`，并把 Makefile 的 `include ../../luci.mk` 改指 `$(TOPDIR)/feeds/luci/luci.mk`。
-
-**为什么不整仓拉**：`immortalwrt/luci` 约 717 MB / 167 个应用，与官方 luci 绝大部分包同名；整仓当第二个软件源加进来会互相覆盖、`feeds install -a` 依赖解析错乱，而且它的 `luci.mk` 带 ucode 模板版本要求，与本仓官方规则不一致。稀疏检出只下 9 个文件，三个问题全避开。插件用的是标准 `uci` / `crontab` / `procd` 接口，跨版本风险小。
+`luci-app-autoreboot` 由 FanchmWrt 源码的默认包列表（`include/target.mk` 的 `DEFAULT_PACKAGES.router`）直接带进固件，不需要开关表点名，也不需要再从 ImmortalWrt 仓库取单目录——早前那行 `gitdir:` 已删除。
 
 - 位置：网页「系统 → 定时重启」（`admin/system/autoreboot`）
-- 默认：插件自带 `/etc/config/autoreboot` 是 `enabled=0`（周日 02:00 但**不启用**）；固件**不做任何预置**，刷完不会自动重启
-- 启用、改时间：直接在网页上点，即时生效，**不用重新编译固件**（服务按 `#autoreboot_` 标记动态管理 crontab，不会叠加多条）
-- 首启脚本 `99-athena-custom-settings` 原先那条写死的 `0 4 * * 0 reboot` 已删除，避免两套计划重复重启
-- 界面语言：插件自带 `po/zh_Hans`，`CONFIG_LUCI_LANG_zh_Hans=y` 时由官方 `luci.mk` 生成中文语言包
+- 默认：`/etc/config/autoreboot` 是 `enabled=0`（周日 02:00 但**不启用**）；固件不做任何预置，刷完不会自动重启
+- 启用、改时间：在网页上点，即时生效，**不用重新编译固件**
+- 首启脚本 `99-athena-custom-settings` 原先写死的 `0 4 * * 0 reboot` 已删除，避免两套计划重复重启
 - 与 `watchcat` 的分工：`watchcat` 管「断网后卡死」的异常自愈，`autoreboot` 管「计划性定期重启」，互不冲突
-- 退路：若首次构建实测该页面打不开，可刷机后在「系统 → 软件包」手动装 ImmortalWrt 官方 ipk，不必重编固件（但每次刷机要重装一次）
+
+`gitdir:` 机制仍保留在 `gen-config.sh` / `diy.sh` 中，以后要从别的大仓取单个应用目录时仍可用。
 
 ## 编译加速（三层缓存）
 
