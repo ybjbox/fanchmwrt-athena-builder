@@ -151,6 +151,27 @@ location /cgi-bin/luci {
 LOC
 }
 
+# 假设备：主题的 header.ut —— 标签标题被写死成 FanchmWrt 的现场
+# 同样只在文件不存在时铺一份，便于同一 tag 重复执行验证幂等。
+seed_header() { # <path>
+  [ -f "$1" ] && return 0
+  if [ -n "${HEADER_SEED_BYTECODE:-}" ]; then
+    # 模拟 CONFIG_LUCI_UTMIN=y 的产物：ucode 字节码，首字节不是 '<'
+    printf '\033uc\000\002\000\000<title>FanchmWrt</title>\n' > "$1"
+    return 0
+  fi
+  cat > "$1" <<'HDR'
+<!DOCTYPE html>
+<html lang="zh-cn">
+	<head>
+		<meta charset="utf-8">
+		<title>FanchmWrt</title>
+	</head>
+	<body></body>
+</html>
+HDR
+}
+
 # run_defaults <tag> <ssid2g> <ssid5g> <pass> [skip5g]
 #   skip5g 非空时保留 __MY_WIFI_SSID_5G__ 占位符，模拟该 Secret 没配
 run_defaults() {
@@ -179,6 +200,9 @@ run_defaults() {
   export ATHENA_NGINX_BIN="${ATHENA_TEST_NGINX_BIN:-$BIN/nginx-ok}"
   export ATHENA_NGINX_CONF="$root/nginx.conf"
   : > "$ATHENA_NGINX_CONF"
+  # 标签标题段：header.ut 也给一份假的
+  export ATHENA_LUCI_HEADER="$root/header.ut"
+  seed_header "$ATHENA_LUCI_HEADER"
   PATH="$BIN:$PATH" $SH "$root/script" > /dev/null 2>&1 < /dev/null
   RC=$?
 }
@@ -292,6 +316,7 @@ seed_nginx "$UCI_DB"
 ATHENA_NGINX_UCI="$root/no-such-nginx" \
 ATHENA_NGINX_LOCATIONS="$root/no-such-locations" \
 ATHENA_NGINX_BIN="$BIN/nginx-ok" \
+ATHENA_LUCI_HEADER="$root/no-such-header" \
   PATH="$BIN:$PATH" $SH "$root/script" > /dev/null 2>&1 < /dev/null
 DB="$UCI_DB"
 expect_eq "没有配置文件时不写 listen" \
@@ -347,6 +372,61 @@ if grep -q '未通过校验，已回滚' "$WORK/t13/log.txt"; then
   ok "留下回滚日志"
 else
   bad "留下回滚日志" "$(cat "$WORK/t13/log.txt")"
+fi
+
+# ══ t14 标签标题：从写死的 FanchmWrt 改为跟随 hostname ══
+echo "== t14 标签标题改为跟随 hostname（默认 Athena） =="
+HDR_FILE="$WORK/t1/header.ut"
+if grep -q "boardinfo.hostname ?? 'Athena'" "$HDR_FILE"; then
+  ok "title 改为读 boardinfo.hostname"
+else
+  bad "title 改为读 boardinfo.hostname" "$(grep -i '<title>' "$HDR_FILE")"
+fi
+if grep -q '<title>FanchmWrt</title>' "$HDR_FILE"; then
+  bad "写死的 FanchmWrt 已被替换" "$(grep -i '<title>' "$HDR_FILE")"
+else
+  ok "写死的 FanchmWrt 已被替换"
+fi
+if grep -q 'lang="zh-cn"' "$HDR_FILE"; then
+  ok "文件其余内容未被破坏"
+else
+  bad "文件其余内容未被破坏"
+fi
+if grep -q '浏览器标签标题已改为跟随主机名' "$WORK/t1/log.txt"; then
+  ok "留下标题改动日志"
+else
+  bad "留下标题改动日志" "$(cat "$WORK/t1/log.txt")"
+fi
+
+# ══ t15 幂等：重复执行不重复替换 ══
+echo "== t15 标签标题改动幂等 =="
+run_defaults t15 "Athena_2G" "Athena_5G" "Passw0rd123"
+run_defaults t15 "Athena_2G" "Athena_5G" "Passw0rd123"
+TITLE_CNT="$(grep -c 'boardinfo.hostname' "$WORK/t15/header.ut")"
+expect_eq "文件里只有一处 hostname 标题" 1 "$TITLE_CNT"
+
+# ══ t16 开关关闭：标签保持原样 ══
+echo "== t16 ATHENA_LUCI_TITLE_HOSTNAME=0 → 不动 header.ut =="
+ATHENA_LUCI_TITLE_HOSTNAME=0 run_defaults t16 "Athena_2G" "Athena_5G" "Passw0rd123"
+if grep -q '<title>FanchmWrt</title>' "$WORK/t16/header.ut"; then
+  ok "开关关闭时标题保持原样"
+else
+  bad "开关关闭时标题保持原样" "$(grep -i '<title>' "$WORK/t16/header.ut")"
+fi
+
+# ══ t17 预编译字节码：一个字节都不许动 ══
+echo "== t17 header.ut 是 ucode 字节码 → 跳过，不破坏模板 =="
+HEADER_SEED_BYTECODE=1 run_defaults t17 "Athena_2G" "Athena_5G" "Passw0rd123"
+HDR_FILE="$WORK/t17/header.ut"
+if head -c 1 "$HDR_FILE" | od -An -c | grep -q '033'; then
+  ok "字节码文件首字节未被改成 '<'"
+else
+  bad "字节码文件首字节未被改成 '<'" "$(head -c 4 "$HDR_FILE" | od -An -c)"
+fi
+if grep -q '预编译字节码' "$WORK/t17/log.txt"; then
+  ok "留下字节码跳过日志"
+else
+  bad "留下字节码跳过日志" "$(cat "$WORK/t17/log.txt")"
 fi
 
 echo

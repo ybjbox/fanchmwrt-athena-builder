@@ -239,6 +239,35 @@ if [ "${ATHENA_NGINX_REL_REDIRECT:-1}" = "1" ] && [ -f "$NGINX_LOC" ]; then
   fi
 fi
 
+# ── 11. 浏览器标签标题跟随主机名 ──
+# luci-theme-fanchmwrt 把 <title>FanchmWrt</title> 写死在 header.ut 里，
+# 第 1 段改了 hostname 也不会让标签变——标签跟 hostname 是两回事。
+# 换成读 boardinfo.hostname 后，标签就跟着「系统 → 主机名」走（默认 Athena）；
+# 以后在网页里改主机名，标签也会同步。主题升级若覆盖该文件，重刷首启会再修一次。
+# 想保留原样：把下面的 ATHENA_LUCI_TITLE_HOSTNAME 设为 0。
+LUCI_HEADER="${ATHENA_LUCI_HEADER:-/usr/share/ucode/luci/template/themes/fanchmwrt/header.ut}"
+if [ "${ATHENA_LUCI_TITLE_HOSTNAME:-1}" = "1" ] && [ -f "$LUCI_HEADER" ]; then
+  if [ "$(head -c 1 "$LUCI_HEADER" 2>/dev/null)" != "<" ]; then
+    # CONFIG_LUCI_UTMIN=y 的固件里，*.ut 已被 ucode -c 预编译成字节码，
+    # 在里面替换字符串会破坏长度字段、把模板弄坏。这类固件由编译期
+    # sed 源码解决（见 .github/workflows/build.yml 的「改标签标题」步骤）。
+    log "header.ut 是预编译字节码，跳过运行时改标签标题"
+  elif grep -q "boardinfo.hostname ?? 'Athena'" "$LUCI_HEADER" 2>/dev/null; then
+    :
+  elif grep -q '<title>FanchmWrt</title>' "$LUCI_HEADER" 2>/dev/null; then
+    cp -f "$LUCI_HEADER" "$LUCI_HEADER.athena-bak" 2>/dev/null || true
+    if sed -i "s|<title>FanchmWrt</title>|<title>{{ striptags(boardinfo.hostname ?? 'Athena') }}</title>|" \
+         "$LUCI_HEADER" 2>/dev/null; then
+      # 模板有编译缓存，重启 uwsgi 让新标题立刻生效
+      /etc/init.d/uwsgi restart >/dev/null 2>&1 || true
+      log "浏览器标签标题已改为跟随主机名"
+    else
+      cp -f "$LUCI_HEADER.athena-bak" "$LUCI_HEADER" 2>/dev/null || true
+      log "浏览器标签标题改动失败，已回滚"
+    fi
+  fi
+fi
+
 uci commit network
 uci commit dhcp
 uci commit system
