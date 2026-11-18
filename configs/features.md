@@ -94,14 +94,19 @@
 
 ## 基础功能：旧仓没开、按需补上
 
-> 坑：`upnp` 是上游 `include/target.mk` 的默认包，这里写 `1` 只是重复点名，
+> 坑一：`upnp` 是上游 `include/target.mk` 的默认包，这里写 `1` 只是重复点名，
 > 改成 `0` 不会把它从固件里删掉。真要去掉得走 `scripts/prune-defaults.sh`，
 > 并在 `configs/forbidden-packages.txt` 登记拦截。
-> `autoreboot` 同类，源码自带，已从本表移除（原来那行 `gitdir:` 是多余的）。
+>
+> 坑二：`autoreboot` 在同一个默认包列表里也有，但 FanchmWrt 的 luci feed 指向
+> 官方 `openwrt/luci`，里面**没有**这个应用，那条默认包是空转。它必须靠本表的
+> `gitdir:` 单目录才真正装得进去——2026-11-18 曾按「源码自带」把该行删掉，
+> 结果固件里连菜单都没了，同名条目并不会把包带进来。
 
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
 |---|---|---|---|---|---|
 | upnp | 1 | 0 | luci-app-upnp | | 端口自动映射（游戏机 / BT 下载用）。注意：等于允许局域网设备自行开洞，与行为管理方向相反 |
 | watchcat | 1 | 0 | luci-app-watchcat watchcat | | 定时探测网络，连续失败 N 次自动重启，治「断网后卡死」（异常自愈，与计划重启互不冲突） |
 | logrotate | 1 | 0 | logrotate | | 日志轮转，防日志写满存储。微信推送、行为管理都会写日志 |
+| autoreboot | 1 | 0 | luci-app-autoreboot | gitdir:https://github.com/immortalwrt/luci#master/applications/luci-app-autoreboot | 网页「系统 → 定时重启」。官方 luci feed 没有这个应用，必须靠 `gitdir:` 只取这一个目录（9 个文件）；插件自带 `enabled=0`，不预置时间，改时间不用重编 |
 | ttyd | 1 | 0 | luci-app-ttyd ttyd luci-i18n-ttyd-zh-cn | | 网页终端，装完在「服务 → 终端」。监听 7681；公网走 https 时 iframe 会被混合内容拦，需在 Lucky 单独反代后把「URL override」填成那个地址 |

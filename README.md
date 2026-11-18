@@ -12,12 +12,12 @@
 |---|---|
 | 雅典娜单机型固件 | 亚瑟 / 太乙 / x86 / ipq807x |
 | FanchmWrt snapshot 线（默认 `fanchmwrt-26.11`） | ImmortalWrt / LibWrt / 官方 OpenWrt 线 |
-| 个人 4 个插件 + 点阵屏 + 源码自带的定时重启 | OAF（由内置 fwx 替代） |
+| 个人 4 个插件 + 点阵屏 + ImmortalWrt 定时重启单目录 | OAF（由内置 fwx 替代） |
 | 包点名检查 + 版本锁 + 产物哈希 | SDK 独立分包流水线（需要时再加） |
 
 砍掉的不是能力，是组合数。要恢复多机型时，复制本仓改 `configs/features.md` 即可；`required-packages.txt` 只存固定底座包，功能包由开关表自动派生。
 
-> 源码线仍是 FanchmWrt。表格里「不做 ImmortalWrt 线」指的是**不换成它的整条源码与软件源**；`luci-app-autoreboot` 曾用 `gitdir:` 从它仓库取单目录，后确认 FanchmWrt 源码默认包列表已自带，该行已从开关表删除。
+> 源码线仍是 FanchmWrt。表格里「不做 ImmortalWrt 线」指的是**不换成它的整条源码与软件源**；`luci-app-autoreboot` 用 `gitdir:` 从它仓库取单目录（9 个文件），用本仓官方 luci 的规则编译。FanchmWrt 的默认包列表虽然点名了这个包，但官方 luci feed 里没有该应用，那条默认包是空转——所以这一行不能省。
 
 ---
 
@@ -156,7 +156,7 @@ tests/                               152 条回归断言（18 包校验 + 22 版
 
 ### 当前基线与旧仓的差异
 
-`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**16 条启用、4 条关闭**，35 个包、9 个 git 源 + 1 个 `gitdir` 单目录。
+`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**17 条启用、4 条关闭**，38 个包、13 个 git 源 + 1 个 `gitdir` 单目录。
 
 五处**刻意不照搬**：
 
@@ -172,9 +172,13 @@ tests/                               152 条回归断言（18 包校验 + 22 版
 
 `bandix` 关掉后，流量统计只剩 `fwx` 一套（`luci-app-fwx-traffic-stat` + `luci-app-fwx-session-stat`，已在必需包清单里）；两者口径不同，同时开会出现两个数字不一致的面板，反而难判断哪个可信。
 
-### 定时重启（源码自带，网页可改）
+### 定时重启（ImmortalWrt 插件，网页可改）
 
-`luci-app-autoreboot` 由 FanchmWrt 源码的默认包列表（`include/target.mk` 的 `DEFAULT_PACKAGES.router`）直接带进固件，不需要开关表点名，也不需要再从 ImmortalWrt 仓库取单目录——早前那行 `gitdir:` 已删除。
+`luci-app-autoreboot` 不在官方 `openwrt/luci` 里。FanchmWrt 的 `include/target.mk` 第 86 行确实点名了这个包，但它的 luci feed 指向官方 `openwrt/luci`，包定义根本不存在，那条默认包等于空转。
+
+**2026-11-18 实测**：按「源码自带」判断把开关表那行删掉后，固件 manifest 里 `luci-app-autoreboot` 与 `luci-i18n-autoreboot-zh-cn` 双双消失，网页菜单也没了。所以这一行不能省。
+
+构建时用 `gitdir:` **只取这一个目录**（9 个文件）放进 `package/`，并把 Makefile 的 `include ../../luci.mk` 改指 `$(TOPDIR)/feeds/luci/luci.mk`。不整仓拉的原因：`immortalwrt/luci` 约 717 MB / 167 个应用，与官方 luci 大量同名，当第二个软件源会互相覆盖、`feeds install -a` 依赖解析错乱。
 
 - 位置：网页「系统 → 定时重启」（`admin/system/autoreboot`）
 - 默认：`/etc/config/autoreboot` 是 `enabled=0`（周日 02:00 但**不启用**）；固件不做任何预置，刷完不会自动重启

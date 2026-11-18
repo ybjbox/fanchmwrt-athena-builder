@@ -51,7 +51,7 @@ expect_has "启用 ccache 编译加速" "CONFIG_CCACHE=y"
 expect_has "ccache 依赖的 DEVEL 一并写入" "CONFIG_DEVEL=y"
 expect_has "策略性禁用 OAF" "# CONFIG_PACKAGE_luci-app-oaf is not set"
 expect_has "OpenClash 已启用" "CONFIG_PACKAGE_luci-app-openclash=y"
-expect_not "autoreboot 不再由开关表携带（源码默认包已带）" "CONFIG_PACKAGE_luci-app-autoreboot=y"
+expect_has "定时重启已启用（源码默认包带不进来，必须写在这里）" "CONFIG_PACKAGE_luci-app-autoreboot=y"
 expect_has "网页终端已启用" "CONFIG_PACKAGE_luci-app-ttyd=y"
 expect_has "网页终端本体在" "CONFIG_PACKAGE_ttyd=y"
 expect_has "网页终端中文包在" "CONFIG_PACKAGE_luci-i18n-ttyd-zh-cn=y"
@@ -196,8 +196,9 @@ expect_line "原本关闭的 bandix 打开后自动进清单" 'bandix'
 expect_line "同一行的第二个包也自动进清单" 'luci-app-bandix'
 
 echo "== C16 gitdir 单目录来源（不整仓拉）=="
-# 真实开关表里已无 gitdir 行（autoreboot 确认是源码默认包，已删除），
-# 机制本身仍要守，用临时表验证。
+# 真实开关表里目前只有 autoreboot 一个 gitdir 行（它无法由源码默认包带进来，
+# 2026-11-18 删过一次，固件里就真的没有了）。这里仍用临时表验证机制本身，
+# 免得断言和真实表的具体包名绑死。
 cat > "$WORK/f16.md" <<'EOF'
 | 名称 | 启用 | 设备附加包 | 包列表 | 来源 | 说明 |
 |---|---|---|---|---|---|
@@ -214,6 +215,15 @@ expect_not "没有把 ImmortalWrt 整仓 clone" "immortalwrt/luci"
 sed 's/^| sample | 1 |/| sample | 0 |/' "$WORK/f16.md" > "$WORK/f16off.md"
 run "$GEN" --features "$WORK/f16off.md" --list-gitdirs
 expect_not "关掉后不再取该目录" "luci-app-sample"
+
+echo "== C16b 真实表必须保留 autoreboot 的 gitdir 行 =="
+# 2026-11-18 踩过：把这行当成「源码默认包已带」删掉，结果固件 manifest 里
+# luci-app-autoreboot 与中文包双双消失，网页菜单也没了。官方 luci feed
+# 没有这个应用，那行就是唯一来源，用断言钉死，避免再被误删。
+run "$GEN" --features "$FEATURES" --list-gitdirs
+expect_has "开关表仍有 autoreboot 的单目录来源" "luci-app-autoreboot	https://github.com/immortalwrt/luci"
+run "$GEN" --features "$FEATURES" --list-required
+expect_line "autoreboot 进了派生清单" "luci-app-autoreboot"
 
 echo "== C17 gitdir 写法错误要能拦住 =="
 cat > "$WORK/f17a.md" <<'EOF'
