@@ -55,8 +55,11 @@ expect_has "定时重启已启用（源码默认包带不进来，必须写在�
 expect_has "网页终端已启用" "CONFIG_PACKAGE_luci-app-ttyd=y"
 expect_has "网页终端本体在" "CONFIG_PACKAGE_ttyd=y"
 expect_has "网页终端中文包在" "CONFIG_PACKAGE_luci-i18n-ttyd-zh-cn=y"
-expect_has "mosdns 带 geoip" "CONFIG_PACKAGE_v2ray-geoip=y"
-expect_has "mosdns 带 geosite" "CONFIG_PACKAGE_v2ray-geosite=y"
+# DNS 由 OpenClash 的 fake-ip + nameserver-policy 负责（2026-11-19 定案），
+# smartdns / mosdns 两条行已从开关表删除，这里钉住「不会再被带回来」。
+expect_not "smartdns 不再进配置" "CONFIG_PACKAGE_smartdns=y"
+expect_not "mosdns 不再进配置" "CONFIG_PACKAGE_mosdns=y"
+expect_not "mosdns 的 geo 数据不再进配置" "CONFIG_PACKAGE_v2ray-geoip=y"
 expect_not "不再输出无效的 v2ray-geodata" "CONFIG_PACKAGE_v2ray-geodata=y"
 
 # ybjbox 软件源的网址现在登记在 dhcp_comment 行，被 dhcp_comment / clash_cleaner /

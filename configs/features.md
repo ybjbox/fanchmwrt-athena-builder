@@ -14,7 +14,7 @@
 | 词 | 意思 |
 |---|---|
 | 固件 | 刷进路由器的整套系统 |
-| 包 | 一个功能或软件，比如 OpenClash、smartdns |
+| 包 | 一个功能或软件，比如 OpenClash、ttyd |
 | 软件源（feed） | 像「应用商店」，登记好网址后从里面挑包 |
 | 选中清单（.config） | 编译机内部的清单，记录每个包「要 / 不要」；由本表自动生成，不用手改 |
 | 点名册 | 编译前后两道检查用的「必须到场名单」；缺了谁，构建当场停下报错 |
@@ -84,8 +84,6 @@
 |---|---|---|---|---|---|
 | openclash | 1 | 0 | luci-app-openclash | git:https://github.com/vernesong/OpenClash | 代理 |
 | lucky | 1 | 0 | luci-app-lucky lucky | git:https://github.com/gdy666/luci-app-lucky | 内网穿透 |
-| smartdns | 1 | 0 | luci-app-smartdns smartdns luci-i18n-smartdns-zh-cn | git:https://github.com/pymumu/luci-app-smartdns git:https://github.com/pymumu/openwrt-smartdns | DNS |
-| mosdns | 1 | 0 | luci-app-mosdns mosdns v2ray-geoip v2ray-geosite luci-i18n-mosdns-zh-cn | git:https://github.com/sbwml/luci-app-mosdns | DNS 分流。地理数据包要写 v2ray-geoip / v2ray-geosite，写成 v2ray-geodata 会被悄悄丢掉 |
 | airconnect | 1 | 0 | luci-app-airconnect airconnect | git:https://github.com/sbwml/luci-app-airconnect | AirPlay 桥接 |
 | wechatpush | 1 | 0 | luci-app-wechatpush | git:https://github.com/tty228/luci-app-wechatpush | 微信推送 |
 | bandix | 0 | 0 | bandix luci-app-bandix | git:https://github.com/timsaya/openwrt-bandix git:https://github.com/timsaya/luci-app-bandix | 流量看板。系统自带的流量统计够用，它多驻留一个后台进程还重复出数，故关闭 |

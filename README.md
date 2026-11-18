@@ -156,7 +156,7 @@ tests/                               152 条回归断言（18 包校验 + 22 版
 
 ### 当前基线与旧仓的差异
 
-`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**17 条启用、4 条关闭**，38 个包、13 个 git 源 + 1 个 `gitdir` 单目录。
+`features.md` 的启停状态对齐旧仓 `ybjbox/openwrt-ci-roc`（General / Packages / JDCloud 三份配置）：**15 条启用、4 条关闭**，30 个包、10 个 git 源 + 1 个 `gitdir` 单目录。
 
 五处**刻意不照搬**：
 
