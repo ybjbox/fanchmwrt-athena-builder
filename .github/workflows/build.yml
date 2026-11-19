@@ -165,10 +165,20 @@ jobs:
 
       - name: 上游漂移检查
         # 补丁（platform_copy_config / 默认包精简 / 主题标题）可能哪天被上游自己
-        # 修好，届时补丁会「执行成功但什么也没做」。这里只提醒不拦构建：
-        # 上游修复是好事，不该让构建失败。有漂移会写进本次运行的构建摘要。
-        continue-on-error: true
-        run: bash scripts/check-upstream-drift.sh openwrt --github-summary
+        # 修好，届时补丁会「执行成功但什么也没做」，而你会一直以为它在保护你。
+        #
+        # 分两种触发：
+        #   定时（schedule）→ --strict，有漂移直接失败。周构建是你唯一会看结果的
+        #     那次，让它变红才是「主动找你」；失败点在前置阶段，不会白跑 2.5 小时。
+        #   手动 / 推送   → 非阻塞，只写摘要。临时想编一版时不该被提醒性质的检查挡住。
+        continue-on-error: ${{ github.event_name != 'schedule' }}
+        run: |
+          EXTRA=""
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then EXTRA="--strict"; fi
+          bash scripts/check-upstream-drift.sh openwrt --github-summary $EXTRA || {
+            echo "::error::定时构建发现上游漂移：这些补丁已无必要，请复核后删除对应调用（见构建摘要）"
+            exit 1
+          }
 
       - name: 更新 feeds
         working-directory: openwrt
