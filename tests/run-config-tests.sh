@@ -9,11 +9,30 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KIT="$(cd "$HERE/.." && pwd)"
 GEN="$KIT/scripts/gen-config.sh"
 FEATURES="$KIT/configs/features.md"
+GOLDEN="$HERE/golden/config.txt"
 WORK="$(mktemp -d)"
+
+# 分级（2026-11-19 引入）：
+#   --tier p0   只跑「坏掉会编出坏固件」的那部分 —— 构建门禁用，秒级
+#   --tier all  再加上生成器契约与解析器用例 —— check-config / 提交前用
+TIER=all
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --tier)   TIER="${2:-all}"; shift 2 ;;
+    --tier=*) TIER="${1#*=}"; shift ;;
+    *) shift ;;
+  esac
+done
 
 PASS=0; FAIL=0; CODE=0; OUT=""
 
 run() { OUT="$(bash "$@" 2>&1)"; CODE=$?; }
+
+# 改开关表某一行的启用列。用宽松匹配，别把断言绑死在表格的列宽/空格上：
+# 以前 7 处 `sed 's/^| openclash | 1 |/...'` 一旦重排表格就集体失效。
+row_set() { # <file> <名称> <新值>
+  sed -E "s/^[[:space:]]*\|[[:space:]]*$2[[:space:]]*\|[[:space:]]*[0-9]+[[:space:]]*\|/| $2 | $3 |/" "$1"
+}
 expect_code() {
   if [ "$CODE" = "$2" ]; then printf '  PASS  %s (exit %s)\n' "$1" "$CODE"; PASS=$((PASS+1));
   else printf '  FAIL  %s (want %s, got %s)\n' "$1" "$2" "$CODE"; printf '%s\n' "$OUT" | sed 's/^/        /'; FAIL=$((FAIL+1)); fi
@@ -38,29 +57,40 @@ echo "== C1 当前基线（旧仓同款，去掉 bandix 与主题）=="
 run "$GEN" --features "$FEATURES"
 expect_code "生成成功" 0
 expect_not "片段不含目标行（目标选择由流水线基线负责，重复写入会重置设备）" "CONFIG_TARGET_qualcommax=y"
+# 这里只留「一坏就编出坏固件」的护栏；其余包级枚举交给下面的 C1b golden 一次性
+# 覆盖。以前每加一个插件就要补 3 条正向断言、删一个插件就要改 3 条，维护成本高
+# 而收益重叠（2026-11-19 定）。
 expect_has "无线 board file 显式选中" "CONFIG_PACKAGE_ipq-wifi-jdcloud_re-cs-02=y"
 expect_has "QCN9074 固件显式选中" "CONFIG_PACKAGE_ath11k-firmware-qcn9074=y"
 expect_has "ath11k PCI 驱动显式选中" "CONFIG_PACKAGE_kmod-ath11k-pci=y"
-expect_has "点阵屏驱动普通直选" "CONFIG_PACKAGE_luci-app-athena-led=y"
 expect_not "athena-custom 包不再装入（首启脚本改由 base-files 注入）" "CONFIG_PACKAGE_athena-custom=y"
-expect_has "工具在" "CONFIG_PACKAGE_htop=y"
 expect_has "zram 内核选项在" "CONFIG_KERNEL_ZRAM_BACKEND_LZ4=y"
 expect_has "启用 ccache 编译加速" "CONFIG_CCACHE=y"
 # CCACHE 的选项定义是 `bool "Use ccache" if DEVEL`：DEVEL 没开，这一行会被
 # make defconfig 当未知符号静默丢弃，编译照常成功但全程不走缓存（2026-11-17 查清）。
 expect_has "ccache 依赖的 DEVEL 一并写入" "CONFIG_DEVEL=y"
 expect_has "策略性禁用 OAF" "# CONFIG_PACKAGE_luci-app-oaf is not set"
-expect_has "OpenClash 已启用" "CONFIG_PACKAGE_luci-app-openclash=y"
-expect_has "定时重启已启用（源码默认包带不进来，必须写在这里）" "CONFIG_PACKAGE_luci-app-autoreboot=y"
-expect_has "网页终端已启用" "CONFIG_PACKAGE_luci-app-ttyd=y"
-expect_has "网页终端本体在" "CONFIG_PACKAGE_ttyd=y"
-expect_has "网页终端中文包在" "CONFIG_PACKAGE_luci-i18n-ttyd-zh-cn=y"
 # DNS 由 OpenClash 的 fake-ip + nameserver-policy 负责（2026-11-19 定案），
 # smartdns / mosdns 两条行已从开关表删除，这里钉住「不会再被带回来」。
 expect_not "smartdns 不再进配置" "CONFIG_PACKAGE_smartdns=y"
 expect_not "mosdns 不再进配置" "CONFIG_PACKAGE_mosdns=y"
 expect_not "mosdns 的 geo 数据不再进配置" "CONFIG_PACKAGE_v2ray-geoip=y"
 expect_not "不再输出无效的 v2ray-geodata" "CONFIG_PACKAGE_v2ray-geodata=y"
+
+echo "== C1b 配置片段与 golden 基线逐行一致 =="
+# 一条 diff 覆盖全部包级契约：加/删功能时只需跑 update-golden.sh，不用改断言。
+if [ -f "$GOLDEN" ]; then
+  run "$GEN" --features "$FEATURES"
+  if printf '%s\n' "$OUT" | diff -u "$GOLDEN" - > "$WORK/golden.diff" 2>&1; then
+    printf '  PASS  与基线一致（%s 行）\n' "$(grep -c . "$GOLDEN")"; PASS=$((PASS+1))
+  else
+    printf '  FAIL  配置片段与基线不一致\n'; FAIL=$((FAIL+1))
+    sed 's/^/        /' "$WORK/golden.diff" | head -30
+    printf '        若这是有意的改动，运行：bash tests/update-golden.sh\n'
+  fi
+else
+  printf '  FAIL  缺少基线文件 %s（运行 tests/update-golden.sh 生成）\n' "$GOLDEN"; FAIL=$((FAIL+1))
+fi
 
 # ybjbox 软件源的网址现在登记在 dhcp_comment 行，被 dhcp_comment / clash_cleaner /
 # cf_ipcheck 三行引用。网址一旦被删，gen-config.sh 会在完整性检查里 die，这里守住。
@@ -73,13 +103,33 @@ run "$GEN" --features "$FEATURES" --list-clones
 expect_not "bandix 不再 clone" "openwrt-bandix"
 
 echo "== C2 关掉 OpenClash：包与 clone 一起消失 =="
-sed 's/^| openclash | 1 |/| openclash | 0 |/' "$FEATURES" > "$WORK/f2.md"
+row_set "$FEATURES" openclash 0 > "$WORK/f2.md"
 run "$GEN" --features "$WORK/f2.md"
 expect_code "仍能生成" 0
 expect_not "包已取消" "CONFIG_PACKAGE_luci-app-openclash=y"
 run "$GEN" --features "$WORK/f2.md" --list-clones
 expect_not "clone 清单不含 OpenClash" "OpenClash"
 expect_has "其它 clone 不受影响" "luci-app-athena-led"
+
+echo "== C2b 安全底线：不得静默关掉 uhttpd =="
+# luci-light 硬依赖 uhttpd，写 not set 会被 select 覆盖；一旦真被关掉，
+# 刷完就没有 web 界面了（只能 SSH）。这里守住"绝不输出该行"。
+run "$GEN" --features "$FEATURES"
+expect_code "生成成功" 0
+expect_not "未关掉 uhttpd" "# CONFIG_PACKAGE_uhttpd is not set"
+expect_has "quickfile 插件本身在" "CONFIG_PACKAGE_luci-app-quickfile=y"
+expect_not "未引入 nginx（无法与 uhttpd 共存 80）" "CONFIG_PACKAGE_nginx=y"
+
+# ── 分级出口 ──
+# 以上是「坏掉会编出坏固件」的门禁集（p0）。以下是生成器契约与解析器用例，
+# 只在 --tier all 时跑：它们坏了说明工具链有问题，但不至于让固件变砖，
+# 不该拦住一次 2.5 小时的构建。
+if [ "$TIER" != "all" ]; then
+  echo
+  echo "（--tier p0：已跳过生成器契约与解析器用例，共 $PASS 项）"
+  [ "$FAIL" -eq 0 ] || exit 1
+  exit 0
+fi
 
 echo "== C3 feed 清单去重 =="
 run "$GEN" --features "$FEATURES" --list-feeds
@@ -94,7 +144,7 @@ expect_code "重名被拒" 2
 expect_has "报错点名重名" "功能名重复"
 
 echo "== C5 数据错误：启用列非 0/1 =="
-sed 's/^| lucky | 1 |/| lucky | 2 |/' "$FEATURES" > "$WORK/f5.md"
+row_set "$FEATURES" lucky 2 > "$WORK/f5.md"
 run "$GEN" --features "$WORK/f5.md" --check
 expect_code "非法启用值被拒" 2
 expect_has "报错指出列值" "必须是 0 或 1"
@@ -155,22 +205,13 @@ EOF
 run "$GEN" --features "$WORK/f13.md" --check
 expect_code "缺表头被拒" 2
 
-echo "== C14 安全底线：不得静默关掉 uhttpd =="
-# luci-light 硬依赖 uhttpd，写 not set 会被 select 覆盖；一旦真被关掉，
-# 刷完就没有 web 界面了（只能 SSH）。这里守住"绝不输出该行"。
-run "$GEN" --features "$FEATURES"
-expect_code "生成成功" 0
-expect_not "未关掉 uhttpd" "# CONFIG_PACKAGE_uhttpd is not set"
-expect_has "quickfile 插件本身在" "CONFIG_PACKAGE_luci-app-quickfile=y"
-expect_not "未引入 nginx（无法与 uhttpd 共存 80）" "CONFIG_PACKAGE_nginx=y"
-
 echo "== C15 点名册自动派生：改开关，清单自动跟着变 =="
 run "$GEN" --features "$FEATURES" --list-required
 expect_code "派生清单生成成功" 0
 BASE_N=$(printf '%s\n' "$OUT" | grep -c .)
 expect_line "启用行的工具包在清单里" 'htop'
 
-sed 's/^| logrotate | 1 |/| logrotate | 0 |/' "$FEATURES" > "$WORK/f15a.md"
+row_set "$FEATURES" logrotate 0 > "$WORK/f15a.md"
 run "$GEN" --features "$WORK/f15a.md" --list-required
 expect_not "关掉 logrotate 后清单不再要求它" 'logrotate'
 N_A=$(printf '%s\n' "$OUT" | grep -c .)
@@ -180,7 +221,7 @@ else
   printf '  FAIL  清单行数不对（基线 %s，关掉后 %s）\n' "$BASE_N" "$N_A"; FAIL=$((FAIL+1))
 fi
 
-sed 's/^| tools_base | 1 |/| tools_base | 0 |/' "$FEATURES" > "$WORK/f15b.md"
+row_set "$FEATURES" tools_base 0 > "$WORK/f15b.md"
 run "$GEN" --features "$WORK/f15b.md" --list-required
 expect_not "关掉工具组后 htop 也不在清单" 'htop'
 N_B=$(printf '%s\n' "$OUT" | grep -c .)
@@ -193,7 +234,7 @@ else
     "$BASE_N" "$N_B" "$((BASE_N - TOOLS_N))"; FAIL=$((FAIL+1))
 fi
 
-sed 's/^| bandix | 0 |/| bandix | 1 |/' "$FEATURES" > "$WORK/f15c.md"
+row_set "$FEATURES" bandix 1 > "$WORK/f15c.md"
 run "$GEN" --features "$WORK/f15c.md" --list-required
 expect_line "原本关闭的 bandix 打开后自动进清单" 'bandix'
 expect_line "同一行的第二个包也自动进清单" 'luci-app-bandix'
@@ -215,7 +256,7 @@ expect_has "子目录" "applications/luci-app-sample"
 expect_has "仓库" "immortalwrt/luci"
 run "$GEN" --features "$WORK/f16.md" --list-clones
 expect_not "没有把 ImmortalWrt 整仓 clone" "immortalwrt/luci"
-sed 's/^| sample | 1 |/| sample | 0 |/' "$WORK/f16.md" > "$WORK/f16off.md"
+row_set "$WORK/f16.md" sample 0 > "$WORK/f16off.md"
 run "$GEN" --features "$WORK/f16off.md" --list-gitdirs
 expect_not "关掉后不再取该目录" "luci-app-sample"
 

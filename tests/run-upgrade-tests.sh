@@ -182,8 +182,33 @@ cp "$WORK/tmp11" "$T11/$PLAT_REL"
 SUM1="$(cksum < "$T11/$PLAT_REL")"
 run "$T11"
 expect_code "跳过并成功" 0
-expect_contains "提示已有" "已有 platform_copy_config"
+# 没有执行标记 + 函数已存在 = 上游自己补的（CI 每次全新 clone）
+expect_contains "识别为上游已修复" "上游已自行实现"
+expect_contains "提示补丁可移除" "可移除"
+if grep -q 'platform_copy_config' "$T11/.upstream-drift" 2>/dev/null; then ok "写入漂移记录"; else bad "未写漂移记录"; fi
 if [ "$(cksum < "$T11/$PLAT_REL")" = "$SUM1" ]; then ok "没有重复追加"; else bad "又追加了一份"; fi
+
+echo "== U12 树里已有但实现不同：采上游版本并告警 =="
+T12="$WORK/diffimpl"; make_tree "$T12"
+{ cat "$T12/$PLAT_REL"; printf '\nplatform_copy_config() {\n\tcp "$UPGRADE_BACKUP" /tmp/never\n}\n'; } > "$WORK/tmp12"
+cp "$WORK/tmp12" "$T12/$PLAT_REL"
+SUM1="$(cksum < "$T12/$PLAT_REL")"
+run "$T12"
+expect_code "仍成功（不中断构建）" 0
+expect_contains "识别为上游实现不同" "实现与预期不同"
+expect_contains "要求人工复核" "人工复核"
+if grep -q 'platform_copy_config' "$T12/.upstream-drift" 2>/dev/null; then ok "写入漂移记录"; else bad "未写漂移记录"; fi
+if [ "$(cksum < "$T12/$PLAT_REL")" = "$SUM1" ]; then ok "未覆盖上游实现"; else bad "改动了上游文件"; fi
+
+echo "== U13 树里别处已有定义：拒绝追加（防覆盖上游） =="
+T13="$WORK/elsewhere"; make_tree "$T13"
+mkdir -p "$T13/package/base-files/files/lib/upgrade"
+printf '#!/bin/sh\nplatform_copy_config() {\n\temmc_copy_config\n}\n' \
+  > "$T13/package/base-files/files/lib/upgrade/common-copy.sh"
+run "$T13"
+expect_code "拒绝执行" 1
+expect_contains "提示会覆盖上游实现" "覆盖上游实现"
+if grep -q '^platform_copy_config()' "$T13/$PLAT_REL"; then bad "仍然追加了重复定义"; else ok "未追加重复定义"; fi
 
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"

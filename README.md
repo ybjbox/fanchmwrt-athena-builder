@@ -24,7 +24,7 @@
 ## 目录结构
 
 ```
-.github/workflows/build.yml          完整构建流水线（24 步，约 2.5 小时；二次构建约 1.5 小时）
+.github/workflows/build.yml          完整构建流水线（30 步，约 2.5 小时；二次构建约 1.5 小时）
 .github/workflows/check-config.yml   快速验证（约 10 分钟）：只验证设备选择与包清单，不编译
 configs/features.md                  唯一开关表：编哪些包 + 拉哪些源 + 自动派生点名册
 scripts/gen-config.sh                由 features.md 生成 .config 片段 / clone / gitdir / required 清单
@@ -36,7 +36,9 @@ scripts/check-packages.sh            包校验（--features 合并自动派生�
 scripts/gen-lock.sh / verify-lock.sh 版本锁
 scripts/hash-artifacts.sh            SHA256SUMS / BOM / build-info.json
 scripts/gen-release-notes.sh         Release 说明（刷机要点 / 功能清单 / 校验 / 追溯）
-tests/                               152 条回归断言（18 包校验 + 22 版本锁 + 82 开关 + 30 首启脚本）
+scripts/check-upstream-drift.sh      上游漂移检查：补丁被上游修好时发出提醒
+tests/                               275 条回归断言，分两级跑（见「测试与门禁」）
+tests/golden/config.txt              配置片段基线，一条 diff 覆盖全部包级契约
 ```
 
 ---
@@ -250,6 +252,46 @@ fi
 预期：首次构建（填充缓存）约 2.5 小时，之后稳定在 **1.5 小时左右**。日志里会打印编译前后的 `ccache -s` 统计，可据此判断命中率。
 
 定时每周跑一次还有个附带好处：缓存不会因长期不用而过期，每次都能享受缓存后的速度。
+
+## 测试与门禁（两级）
+
+断言本身不是成本，**「失败时要改测试还是改代码」才是**。据此把测试分成两级：
+
+| 级别 | 内容 | 谁跑 | 耗时 | 坏了意味着 |
+|---|---|---|---|---|
+| **p0（构建门禁）** | 首启脚本、默认包精简、升级补丁、配置生成器门禁（设备/ccache/uhttpd/golden） | `build.yml` 编译前 | 约 1 分钟 | 编出来的固件不能用 |
+| **all（全量）** | p0 + 生成器契约、解析器用例、版本锁、发布说明、漂移检查 | `check-config.yml`；本地 | 约 2 分钟 | 工具链有问题，但不至于变砖 |
+
+```bash
+bash tests/run-all.sh --tier p0    # 构建前的最小门禁
+bash tests/run-all.sh              # 全量（提交前 / 改完 features.md 后）
+```
+
+**包级契约不用逐条写断言**：`tests/golden/config.txt` 存着 `gen-config.sh` 的完整输出，测试用一条 `diff` 覆盖全部包。增删功能时不必改断言，跑一次 `bash tests/update-golden.sh` 更新基线即可（先确认 diff 里每一行都是你有意改的）。这条命令把「改测试」从逐条编辑压成一步。
+
+**为什么不再堆枚举断言**：2026-11-19 之前的做法是每加一个插件补 3 条正向断言、每删一个改 3 条，而 golden 已经覆盖同样的内容。现在只保留「一坏就编出坏固件」的护栏与负向断言（负向断言只在有人把东西加回来时才响，不干扰新功能）。
+
+### 上游漂移检查
+
+我们对上游源码打了三个补丁：`platform_copy_config`（保留配置升级）、默认包精简、主题标题。它们都可能哪天被上游自己修好——届时补丁仍会「执行成功」，只是什么也没做，而你会一直以为它在保护你。
+
+各补丁脚本在发现「上游已自愈」时写一条记录到 `openwrt/.upstream-drift`，`scripts/check-upstream-drift.sh` 汇总成构建摘要：
+
+```
+## 上游漂移检查
+发现 3 处漂移：下列补丁的作用已被上游自己实现，复核后可删除对应调用。
+```
+
+三种情况分开处理，不再混为一谈：
+
+| 情况 | 判定依据 | 行为 |
+|---|---|---|
+| 同一棵树重复执行补丁 | 存在 `.patch-upgrade-applied` 标记 | 静默跳过，不报漂移 |
+| 上游已实现且等价 | 函数存在且调用 `emmc_copy_config` | 告警「补丁可移除」+ 记录 |
+| 上游实现不同 | 函数存在但不调用 | 告警「已采上游版本，请人工复核」+ 记录 |
+| 上游搬到通用层 | 树里别处已有同名定义 | **直接失败**（追加会覆盖上游实现） |
+
+`build.yml` 里这一步是 `continue-on-error`，只提醒不拦构建——上游修复是好事。想让它主动找你，定时任务里加 `--strict` 即可。
 
 ## 本地复现
 

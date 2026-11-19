@@ -163,25 +163,27 @@ jobs:
       - name: 应用定制（feed + 源码 + 单目录）
         run: bash scripts/diy.sh openwrt
 
+      - name: 上游漂移检查
+        # 补丁（platform_copy_config / 默认包精简 / 主题标题）可能哪天被上游自己
+        # 修好，届时补丁会「执行成功但什么也没做」。这里只提醒不拦构建：
+        # 上游修复是好事，不该让构建失败。有漂移会写进本次运行的构建摘要。
+        continue-on-error: true
+        run: bash scripts/check-upstream-drift.sh openwrt --github-summary
+
       - name: 更新 feeds
         working-directory: openwrt
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 回归测试（首启脚本）
-        # 必须在「注入 Secrets」之前跑：测试自己对占位符做替换，
+      - name: 回归测试（构建门禁 p0）
+        # 必须在「注入 Secrets」之前跑：首启脚本测试自己对占位符做替换，
         # 真实模板被替换过之后就测不出「Secret 没配」这类场景了。
-        run: bash tests/run-defaults-tests.sh
-
-      - name: 回归测试（默认包精简）
-        # 纯文本操作，秒级完成：验证 wol / ddns 确实从上游默认列表里被删掉
-        run: bash tests/run-prune-tests.sh
-
-      - name: 回归测试（升级保留配置补丁）
-        # 秒级：验证 platform_copy_config 按上游原文补上、幂等、且不破坏语法。
-        # 补不上就是「勾了保留配置也会丢」，必须在编译前拦住。
-        run: bash tests/run-upgrade-tests.sh
+        #
+        # 只跑 p0：首启脚本、默认包精简、升级补丁、配置生成器门禁。
+        # 生成器契约与解析器用例（--tier all）放在 check-config 里跑，
+        # 它们坏了说明工具有问题，不该拦住一次 2.5 小时的构建。
+        run: bash tests/run-all.sh --tier p0
 
       - name: 注入 Secrets 到默认配置
         env:

@@ -100,9 +100,20 @@ bash "$SCRIPT_DIR/patch-upgrade.sh" "$PWD"
 # 必须在编译前改——CONFIG_LUCI_UTMIN=y 时 *.ut 会被 ucode -c 预编译成
 # 字节码，装到设备上再 sed 会把模板弄坏。
 LUCI_HEADER="package/fcm/luci-theme-fanchmwrt/ucode/template/themes/fanchmwrt/header.ut"
-if [ -f "$LUCI_HEADER" ] && grep -q '<title>FanchmWrt</title>' "$LUCI_HEADER"; then
-  sed -i "s|<title>FanchmWrt</title>|<title>{{ striptags(boardinfo.hostname ?? 'Athena') }}</title>|" "$LUCI_HEADER"
-  echo "[diy] 标签标题改为跟随 hostname"
+DRIFT_FILE="${UPSTREAM_DRIFT_FILE:-.upstream-drift}"
+drift() { printf '%s\t%s\n' "$1" "$2" >> "$DRIFT_FILE"; }
+if [ -f "$LUCI_HEADER" ]; then
+  if grep -q '<title>FanchmWrt</title>' "$LUCI_HEADER"; then
+    sed -i "s|<title>FanchmWrt</title>|<title>{{ striptags(boardinfo.hostname ?? 'Athena') }}</title>|" "$LUCI_HEADER"
+    echo "[diy] 标签标题改为跟随 hostname"
+  elif grep -q "striptags(boardinfo.hostname" "$LUCI_HEADER"; then
+    echo "[diy] 标签标题已是跟随 hostname（上游已改）"
+    drift "luci-title" "主题模板已自带 hostname 标题，diy.sh 第 7 段可移除"
+  else
+    # 上游换了写法：sed 会静默无变化，标签就不会跟着改了。宁可吵一声。
+    echo "[diy] WARNING: 主题模板里找不到 <title>FanchmWrt</title>，标题不会被改，请人工复核"
+    drift "luci-title" "模板中找不到 FanchmWrt 标题，sed 已失效，需人工复核"
+  fi
 fi
 
 echo "[diy] 完成：$(grep -c '^src-git' feeds.conf.default) 个 feed，$(

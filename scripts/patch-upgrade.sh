@@ -46,6 +46,14 @@ EMMC="${UPGRADE_EMMC_SH:-$TREE/package/base-files/files/lib/upgrade/emmc.sh}"
 
 die() { printf '[upgrade] ERROR: %s\n' "$*" >&2; exit 1; }
 info() { printf '[upgrade] %s\n' "$*"; }
+warn() {
+  printf '[upgrade] WARNING: %s\n' "$*" >&2
+  if [ -n "${GITHUB_ACTIONS:-}" ]; then printf '::warning::%s\n' "$*" >&2; fi
+}
+
+# 「补丁已无必要」的记录：由 scripts/check-upstream-drift.sh 汇总成构建摘要。
+DRIFT_FILE="${UPSTREAM_DRIFT_FILE:-$TREE/.upstream-drift}"
+drift() { printf '%s\t%s\n' "$1" "$2" >> "$DRIFT_FILE"; }
 
 [ -f "$PLATFORM" ] || die "找不到 $PLATFORM（源码树路径不对？）"
 
@@ -61,11 +69,42 @@ else
   die "找不到 $EMMC（没有 emmc_copy_config，补了也没用）"
 fi
 
-# 幂等：已经有就跳过。注意只认函数定义行，不认注释里的提及。
+# 上游漂移探测（2026-11-19 补的盲区）
+# ----------------------------------
+# CI 每次都是全新 clone，所以走到「文件里已经有这个函数」，唯一可能来源就是
+# 上游自己补的 —— 也就是说这条分支处理的正是「上游已修复」。不能只打一行
+# info 就退出，否则补丁会静默空转，你永远不知道该删。分三态：
+#   1. 已实现且调用 emmc_copy_config → 等价，提示可删补丁
+#   2. 已实现但实现不同          → 采用上游版本，提示人工复核
+#   3. 文件里没有                → 走下面的追加逻辑
+APPLIED_MARK="$TREE/.patch-upgrade-applied"
 if grep -q '^platform_copy_config()' "$PLATFORM"; then
-  info "已有 platform_copy_config，跳过"
+  # 有执行标记 = 同一棵树里被重复调用（本地跑两次、或脚本被调了两遍），
+  # 不是上游自愈，不该报漂移。
+  if [ -f "$APPLIED_MARK" ]; then
+    info "已有 platform_copy_config（本补丁先前已执行过），跳过"
+    exit 0
+  fi
+  if awk '/^platform_copy_config\(\)/,/^}/' "$PLATFORM" | grep -q 'emmc_copy_config'; then
+    warn "上游已自行实现 platform_copy_config（且调用 emmc_copy_config），本补丁可移除"
+    drift "platform_copy_config" "上游已实现等价逻辑，可删 patch-upgrade.sh 的调用"
+  else
+    warn "上游已有 platform_copy_config 但未调用 emmc_copy_config，实现与预期不同：已采用上游版本，请人工复核"
+    drift "platform_copy_config" "上游实现与预期不同，已采上游版本，需人工复核"
+  fi
   exit 0
 fi
+
+# 上游也可能把实现搬到通用层（如 package/base-files 的公共脚本）。那种情况下
+# 这里再追加一份就变成「覆盖」而不是「补充」：两份定义都会被 source，实际生效
+# 哪一份取决于加载顺序，属于最难查的一类问题。追加前先在树里搜一遍。
+for d in "$TREE/package/base-files" "$TREE/target/linux/qualcommax"; do
+  [ -d "$d" ] || continue
+  hit="$(grep -rl '^platform_copy_config()' "$d" 2>/dev/null | grep -v "^$PLATFORM$" || true)"
+  if [ -n "$hit" ]; then
+    die "源码树其他位置已有 platform_copy_config 定义：$hit（追加会覆盖上游实现，请人工复核）"
+  fi
+done
 
 # 文件末尾没有换行时，直接追加会把新内容粘到最后一行上
 if [ -n "$(tail -c 1 "$PLATFORM" 2>/dev/null)" ]; then
@@ -104,5 +143,6 @@ awk '/^platform_copy_config\(\)/,/^}/' "$PLATFORM" | grep -q 'emmc_copy_config' 
 [ "$(grep -c '^platform_copy_config()' "$PLATFORM")" = "1" ] \
   || die "platform_copy_config 出现多次，请人工检查"
 
+printf 'applied\n' > "$APPLIED_MARK"
 info "已补 platform_copy_config：$(basename "$(dirname "$PLATFORM")")/platform.sh"
 info "生效顺序：本次编出的固件刷入后，下一次升级才会真正保留配置"

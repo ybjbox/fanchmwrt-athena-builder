@@ -104,6 +104,26 @@ run "$T6"
 expect_code "结构变化返回 1" 1
 expect_contains "提示上游结构可能变了" "上游结构可能变了"
 
+echo "== P7 全新树里已无目标包：判为上游自愈并记录漂移 =="
+# 模拟上游自己把 wol / ddns 从默认列表删掉了：没有执行标记（不是我们删的），
+# 列表里也没有这两个包。以前这种情况只打「已是精简状态」，等于上游修好了
+# 也没人知道；现在必须报出来。
+T7="$WORK/upstream-fixed"; mkdir -p "$T7/include"
+cat > "$T7/include/target.mk" <<'MK'
+DEFAULT_PACKAGES:=\
+	base-files \
+	libc \
+	dropbear
+
+DEFAULT_PACKAGES.router:=\
+	ip-full
+MK
+run "$T7"
+expect_code "仍成功" 0
+expect_contains "判为上游已自愈" "上游已自愈"
+if grep -q 'prune:luci-app-wol' "$T7/.upstream-drift" 2>/dev/null; then ok "写入 wol 漂移记录"; else bad "未写 wol 漂移记录"; fi
+if grep -q 'prune:luci-app-ddns' "$T7/.upstream-drift" 2>/dev/null; then ok "写入 ddns 漂移记录"; else bad "未写 ddns 漂移记录"; fi
+
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

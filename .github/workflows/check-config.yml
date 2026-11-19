@@ -25,6 +25,12 @@ jobs:
       - name: 检出构建配置
         uses: actions/checkout@v6
 
+      - name: 回归测试（全量，含 golden 基线）
+        # 放在最前面：只依赖 bash/gawk，不装依赖也不拉源码，几十秒就能出结论。
+        # 这里是「改完 features.md 的第一次验证」，跑全量（--tier all），
+        # 与 build.yml 里只跑 p0 的门禁形成两级。
+        run: bash tests/run-all.sh --tier all
+
       - name: 安装编译依赖
         run: |
           # Ubuntu 24.04 为 Python 3.12，官方清单不含 python3-distutils
