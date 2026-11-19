@@ -75,6 +75,42 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: 检出构建配置
+        uses: actions/checkout@v6
+
+      - name: 上游补丁冒烟（用今天的上游文件实跑三个补丁）
+        # 补的空窗：build 里那次漂移检查只在「真的构建」时跑，上游无变化时
+        # 定时门禁会跳过整轮；而这个仓库自己的脚本改动（push 到 main）也不触发
+        # 任何工作流。于是一段坏掉的补丁脚本可能几周没人发现。
+        #
+        # 这里每周用上游真实文件跑一遍三个补丁，几秒完成：只取补丁要动的 4 个
+        # 文件（几 KB），不克隆 300MB 源码树。
+        # 只报不拦：失败会让本 job 变红并打 error 标注，但 build 的 if 用的是
+        # always()，周固件照出。
+        continue-on-error: true
+        run: |
+          set -Eeuo pipefail
+          B="https://raw.githubusercontent.com/fanchmwrt/fanchmwrt-snapshot/$SOURCE_REF"
+          P="target/linux/qualcommax/ipq60xx/base-files/lib/upgrade/platform.sh"
+          E="package/base-files/files/lib/upgrade/emmc.sh"
+          H="package/fcm/luci-theme-fanchmwrt/ucode/template/themes/fanchmwrt/header.ut"
+          T=drift-tree
+          mkdir -p "$T/$(dirname "$P")" "$T/$(dirname "$E")" "$T/include" "$T/$(dirname "$H")"
+          curl -fsSL "$B/$P" -o "$T/$P"
+          curl -fsSL "$B/$E" -o "$T/$E"
+          curl -fsSL "$B/include/target.mk" -o "$T/include/target.mk"
+          curl -fsSL "$B/$H" -o "$T/$H"
+
+          bash scripts/prune-defaults.sh "$T"
+          bash scripts/patch-upgrade.sh "$T"
+          bash scripts/patch-luci-title.sh "$T"
+
+          if ! bash scripts/check-upstream-drift.sh "$T" --github-summary --strict; then
+            echo "::error::上游已修复下列补丁，请复核后删除对应调用（详见构建摘要）"
+            exit 1
+          fi
+          echo "[smoke] 三个补丁在今天的上游文件上都跑通了"
+
   build:
     name: Athena / ${{ github.event_name }}
     needs: gate

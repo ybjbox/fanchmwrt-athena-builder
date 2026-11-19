@@ -95,26 +95,10 @@ bash "$SCRIPT_DIR/patch-upgrade.sh" "$PWD"
 
 # ── 7. LuCI 浏览器标签标题 ──
 # 主题把 <title>FanchmWrt</title> 写死在 header.ut 里，首启改 hostname 不会
-# 让标签跟着变。这里在编译前改源码：标题读 boardinfo.hostname（首启设为
-# Athena），以后在网页里改主机名，标签也同步。
-# 必须在编译前改——CONFIG_LUCI_UTMIN=y 时 *.ut 会被 ucode -c 预编译成
-# 字节码，装到设备上再 sed 会把模板弄坏。
-LUCI_HEADER="package/fcm/luci-theme-fanchmwrt/ucode/template/themes/fanchmwrt/header.ut"
-DRIFT_FILE="${UPSTREAM_DRIFT_FILE:-.upstream-drift}"
-drift() { printf '%s\t%s\n' "$1" "$2" >> "$DRIFT_FILE"; }
-if [ -f "$LUCI_HEADER" ]; then
-  if grep -q '<title>FanchmWrt</title>' "$LUCI_HEADER"; then
-    sed -i "s|<title>FanchmWrt</title>|<title>{{ striptags(boardinfo.hostname ?? 'Athena') }}</title>|" "$LUCI_HEADER"
-    echo "[diy] 标签标题改为跟随 hostname"
-  elif grep -q "striptags(boardinfo.hostname" "$LUCI_HEADER"; then
-    echo "[diy] 标签标题已是跟随 hostname（上游已改）"
-    drift "luci-title" "主题模板已自带 hostname 标题，diy.sh 第 7 段可移除"
-  else
-    # 上游换了写法：sed 会静默无变化，标签就不会跟着改了。宁可吵一声。
-    echo "[diy] WARNING: 主题模板里找不到 <title>FanchmWrt</title>，标题不会被改，请人工复核"
-    drift "luci-title" "模板中找不到 FanchmWrt 标题，sed 已失效，需人工复核"
-  fi
-fi
+# 让标签跟着变。这里在编译前改源码（必须在编译前——CONFIG_LUCI_UTMIN=y 时
+# *.ut 会被预编译成字节码，到设备上再 sed 会把模板弄坏）。
+# 逻辑与漂移判定收在独立脚本里，便于测试，也便于定时任务复用。
+bash "$SCRIPT_DIR/patch-luci-title.sh" "$PWD"
 
 echo "[diy] 完成：$(grep -c '^src-git' feeds.conf.default) 个 feed，$(
   find package -maxdepth 1 -mindepth 1 -type d | wc -l | tr -d ' '
