@@ -172,8 +172,9 @@ seed_header() { # <path>
 HDR
 }
 
-# run_defaults <tag> <ssid2g> <ssid5g> <pass> [skip5g]
+# run_defaults <tag> <ssid2g> <ssid5g> <pass> [skip5g] [marker]
 #   skip5g 非空时保留 __MY_WIFI_SSID_5G__ 占位符，模拟该 Secret 没配
+#   marker 覆盖标记文件路径（t23 用它模拟「写不进去」；默认写本 tag 的临时目录）
 run_defaults() {
   local tag="$1" s2="$2" s5="$3" pw="$4" skip="${5:-}"
   local root="$WORK/$tag"
@@ -182,7 +183,7 @@ run_defaults() {
   # 不是「第二次直接跳过」）；升级保护本身另由 t18-t21 覆盖。
   # 用局部变量而不是 export：export 会把第一次的路径钉死成全局值，
   # 后面的 tag 全部写到第一个目录去（踩过）。
-  local marker="$root/athena"
+  local marker="${6:-$root/athena}"
   local force="${ATHENA_FIRSTBOOT_FORCE:-1}"
   mkdir -p "$root"
   if [ -n "$skip" ]; then
@@ -545,6 +546,34 @@ if grep -q 'ATHENA_FIRSTBOOT_FORCE' "$SCRIPT"; then
 else
   bad "提供强制重跑开关"
 fi
+
+# ══ t22 静态检查：标记必须在改配置之前写入 ══
+# 2026-11-19 实机踩到：镜像里有本脚本、脚本也确实跑过（/etc/uci-defaults 已空），
+# 但 /etc/config/athena 从未生成，升级保护等于没装。原因是写入放在末尾，任何一段
+# 提前结束都会漏掉它，而 uci-defaults 本来就不重跑。改成开头写以后钉死这个顺序。
+echo "== t22 标记写入必须早于第一个配置改动 =="
+MK_LINE="$(grep -n '^write_marker$' "$SCRIPT" | head -1 | cut -d: -f1)"
+UCI_LINE="$(grep -n '^uci set ' "$SCRIPT" | head -1 | cut -d: -f1)"
+if [ -n "$MK_LINE" ] && [ -n "$UCI_LINE" ] && [ "$MK_LINE" -lt "$UCI_LINE" ]; then
+  ok "write_marker 在第 $MK_LINE 行，早于首个 uci set（第 $UCI_LINE 行）"
+else
+  bad "标记写入位置不对" "write_marker=${MK_LINE:-无} uci_set=${UCI_LINE:-无}"
+fi
+
+# ══ t23 标记写不进去：不中断，但要留 err 日志 ══
+# 写不进去意味着这台机器下次「保留配置」升级会被默认值全覆盖，必须显眼。
+echo "== t23 标记写入失败：不中断，留 err 日志 =="
+mkdir -p "$WORK/t23"
+: > "$WORK/t23/blocker"    # 用普通文件占位，让 mkdir -p 与重定向都失败
+run_defaults t23 "Athena_2G" "Athena_5G" "Passw0rd123" "" "$WORK/t23/blocker/athena"
+if [ "$RC" = "0" ]; then ok "写入失败不影响后续执行"; else bad "脚本异常退出" "rc=$RC"; fi
+if grep -q '写入升级保护标记失败' "$WORK/t23/log.txt" 2>/dev/null; then
+  ok "留下写入失败日志"
+else
+  bad "留下写入失败日志" "$(cat "$WORK/t23/log.txt" 2>/dev/null)"
+fi
+# 即使标记没写进去，配置本身仍应照常应用
+expect_eq "配置仍然被应用" "Athena_2G" "$(get_db "$WORK/t23/uci" wireless.@wifi-iface0.ssid)"
 
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"

@@ -30,7 +30,7 @@ log() { logger -t athena-defaults "$*" 2>/dev/null || true; }
 # 判据用 /etc/config/athena 这个标记文件：
 #   - 它在 /etc/config 下，实测 sysupgrade -b 会把整个目录打进备份包（67 个文件），
 #     所以保留配置升级时它跟着回来；
-#   - 首次安装时文件不存在 → 正常执行 → 末尾写入；
+#   - 首次安装时文件不存在 → 正常执行 → 立即写入（见下面的 write_marker）；
 #   - 想强制按出厂默认重跑（例如改了 Secrets 里的 WiFi 密码后重刷）：
 #     ATHENA_FIRSTBOOT_FORCE=1
 #
@@ -41,6 +41,32 @@ if [ "${ATHENA_FIRSTBOOT_FORCE:-0}" != "1" ] && [ -f "$MARKER" ]; then
   log "检测到 $MARKER，判定为保留配置升级，跳过默认值写入（强制重跑：ATHENA_FIRSTBOOT_FORCE=1）"
   exit 0
 fi
+
+# ── 标记落盘时机：在改配置之前（2026-11-19 从末尾挪到这里）──
+# 原来放在脚本最后，理由是「走完全部段才算应用完成」。但 uci-defaults 执行后
+# 必定自删、失败也不会重跑，所以「末尾才写」换不来重试语义，只会在中途异常时
+# 留下一台没有标记的设备 —— 下次升级照样被默认值覆盖一遍。
+#
+# 这个不是假想：2026-11-19 在实机上查到，镜像里明明有本脚本、脚本也确实跑过
+# （/etc/uci-defaults 已空），但 /etc/config/athena 从未生成，升级保护等于没装，
+# 而当时已无法从日志定位是哪一段中断的（日志随多次重启丢失）。
+# 提前写以后，无论后面哪一段出问题，下次升级都不会再覆盖用户配置。
+write_marker() {
+  REL="$(. /etc/openwrt_release 2>/dev/null && printf '%s' "${DISTRIB_DESCRIPTION:-}")"
+  mkdir -p "$(dirname "$MARKER")" 2>/dev/null || true
+  if {
+    printf "config athena 'firstboot'\n"
+    printf "\toption applied '1'\n"
+    printf "\toption applied_release '%s'\n" "${REL:-unknown}"
+  } > "$MARKER" 2>/dev/null; then
+    log "已写入升级保护标记：$MARKER${REL:+（$REL）}"
+  else
+    # 写不进去要显眼：这台机器下次「保留配置」升级会被默认值全覆盖
+    logger -p user.err -t athena-defaults \
+      "写入升级保护标记失败：$MARKER（下次刷机会再次覆盖默认值）" 2>/dev/null || true
+  fi
+}
+write_marker
 
 # ── 0. SSID 红线 ──
 # SSID 是明文广播的：一旦某个 SSID 变量装的是 WiFi 密码，密码就等于
@@ -293,18 +319,5 @@ uci commit network
 uci commit dhcp
 uci commit system
 uci commit luci 2>/dev/null || true
-
-# ── 写入升级保护标记（必须放在最后）──
-# 只有走完上面所有段才落这个文件。下次刷机若勾了「保留配置」，/etc/config 会被
-# preinit 整份还原（含本文件），脚本开头的判据就会命中原样退出，不再覆盖。
-# 记下写入时的固件版本，方便排查「这次升级为什么跳过」。
-REL="$(. /etc/openwrt_release 2>/dev/null && printf '%s' "${DISTRIB_DESCRIPTION:-}")"
-mkdir -p "$(dirname "$MARKER")" 2>/dev/null || true
-{
-  printf "config athena 'firstboot'\n"
-  printf "\toption applied '1'\n"
-  printf "\toption applied_release '%s'\n" "${REL:-unknown}"
-} > "$MARKER" 2>/dev/null || log "写入升级保护标记失败：$MARKER（下次刷机会再次覆盖默认值）"
-log "已写入升级保护标记：$MARKER${REL:+（$REL）}"
 
 exit 0
