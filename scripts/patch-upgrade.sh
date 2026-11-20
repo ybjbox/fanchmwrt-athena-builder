@@ -97,12 +97,19 @@ fi
 
 # 上游也可能把实现搬到通用层（如 package/base-files 的公共脚本）。那种情况下
 # 这里再追加一份就变成「覆盖」而不是「补充」：两份定义都会被 source，实际生效
-# 哪一份取决于加载顺序，属于最难查的一类问题。追加前先在树里搜一遍。
-for d in "$TREE/package/base-files" "$TREE/target/linux/qualcommax"; do
+# 哪一份取决于加载顺序，属于最难查的一类问题。
+#
+# 查重范围必须精确到「会和本文件同时被 source」的地方：
+#   - package/base-files：通用层，任何 target 都会加载 → 必须查
+#   - 本 subtarget 自己的目录（从 $PLATFORM 反推）→ 必须查
+# 同平台的兄弟 subtarget（qualcommax 下的 ipq807x / ipq-wifi 等）不会与本文件
+# 同时加载，2026-11-20 因为把它们也算进来，周构建被误判拦下（见 U14）。
+SUB_ROOT="$(printf '%s' "$PLATFORM" | sed 's#/base-files/lib/upgrade/platform\.sh$##')"
+for d in "$TREE/package/base-files" "$SUB_ROOT"; do
   [ -d "$d" ] || continue
   hit="$(grep -rl '^platform_copy_config()' "$d" 2>/dev/null | grep -v "^$PLATFORM$" || true)"
   if [ -n "$hit" ]; then
-    die "源码树其他位置已有 platform_copy_config 定义：$hit（追加会覆盖上游实现，请人工复核）"
+    die "同一加载范围内已有 platform_copy_config 定义：$hit（追加会覆盖上游实现，请人工复核）"
   fi
 done
 

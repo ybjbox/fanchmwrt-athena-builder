@@ -210,6 +210,18 @@ expect_code "拒绝执行" 1
 expect_contains "提示会覆盖上游实现" "覆盖上游实现"
 if grep -q '^platform_copy_config()' "$T13/$PLAT_REL"; then bad "仍然追加了重复定义"; else ok "未追加重复定义"; fi
 
+echo "== U14 兄弟 subtarget 已有实现：不该拦本 subtarget =="
+# 2026-11-20 周构建就挂在这：上游给 qualcommax/ipq807x 补了 platform_copy_config，
+# 而 ipq60xx 仍然缺。两个 subtarget 的 platform.sh 不会同时被 source，不算冲突。
+T14="$WORK/sibling"; make_tree "$T14"
+mkdir -p "$T14/target/linux/qualcommax/ipq807x/base-files/lib/upgrade"
+printf 'platform_copy_config() {\n\temmc_copy_config\n}\n' \
+  > "$T14/target/linux/qualcommax/ipq807x/base-files/lib/upgrade/platform.sh"
+run "$T14"
+expect_code "正常补丁，不误报" 0
+if grep -q '^platform_copy_config()' "$T14/$PLAT_REL"; then ok "ipq60xx 侧已补上"; else bad "ipq60xx 侧未补上"; fi
+if [ -s "$T14/.upstream-drift" ]; then bad "不该记录漂移" "$(cat "$T14/.upstream-drift")"; else ok "未记录漂移"; fi
+
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
