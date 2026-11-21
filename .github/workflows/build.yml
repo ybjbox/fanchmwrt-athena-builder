@@ -22,8 +22,11 @@ on:
 
 concurrency:
   # 定时任务单独成组且不取消任何在跑的构建——否则你手动触发的构建
-  # 会被到点的定时任务掐掉。手动构建之间仍互相取消（连续点只跑最新那次）。
-  group: athena-${{ github.event_name == 'schedule' && 'scheduled' || github.ref }}
+  # 会被到点的定时任务掐掉。
+  # 手动构建（含分支触发的临时构建）统一归到 manual 组：
+  # 只要开新的就取消旧的，不按 ref 分组。之前按 github.ref 分组，
+  # 从分支触发会和 main 并行跑，两次构建抢同一份产物与 Release 编号。
+  group: athena-${{ github.event_name == 'schedule' && 'scheduled' || 'manual' }}
   cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 permissions:
@@ -371,19 +374,39 @@ jobs:
 
       - name: 编译（实时显示进度）
         working-directory: openwrt
+        timeout-minutes: 240
         run: |
           # GitHub 的 bash 默认带 -e：make 一失败，整个 step 立刻退出，下面的
           # 降级重跑与日志保存全被跳过（2026-11-16 那次失败就是这样，日志里
           # 连"第一遍 make 退出码"都没打印，包级错误也没能留存）。显式关掉。
           set +e
-          set -o pipefail
           echo "---- ccache 状态（编译前）----"
           ccache -s || true
+
+          # 编译必须「可被取消」且实时显示进度。
+          # 原来写 make ... | tee：runner 收到 cancel 后给 shell 发 SIGINT/SIGTERM，
+          # 但 bash 要等前台管道结束才执行 trap，而 make -j 的 gcc 子进程还攥着
+          # 管道写端，step 就永远挂着（2026-11-22 实测挂 30 分钟不退出，并发组被
+          # 占死，新构建只能排队；DELETE run 也被 GitHub 以 403 拒绝）。
+          # 改成：make 写文件 + tail -f 回显 + trap 杀进程树。
+          # wait 是可被信号中断的内建命令，trap 会立刻执行。
+          run_make_logged() {   # $1=日志文件，其余参数原样传给 make
+            local log="$1"; shift
+            : > "$log"
+            make "$@" > "$log" 2>&1 &
+            local mpid=$!
+            tail -n +1 -f "$log" &
+            local tpid=$!
+            trap 'kill -TERM "$mpid" "$tpid" 2>/dev/null; pkill -TERM -P "$mpid" 2>/dev/null; exit 130' INT TERM
+            wait "$mpid"; local rc=$?
+            kill -TERM "$tpid" 2>/dev/null; wait "$tpid" 2>/dev/null
+            return "$rc"
+          }
+
           # 第一遍用默认摘要模式：每个包只有一两行输出，实时滚动，
-          # 一眼看出「编到哪个软件」，不会像以前 tail 缓冲那样长时间空白。
-          # 完整输出同步存 /tmp/build.log 备查。
-          make -j"$(nproc)" 2>&1 | tee /tmp/build.log
-          rc=${PIPESTATUS[0]}
+          # 一眼看出「编到哪个软件」。完整输出存 /tmp/build.log 备查。
+          run_make_logged /tmp/build.log -j"$(nproc)"
+          rc=$?
           echo "第一遍 make 退出码: $rc"
           if [ "$rc" -eq 0 ]; then
             echo "---- ccache 状态（编译后）----"
@@ -393,8 +416,8 @@ jobs:
           # 失败自动降级：单线程 V=s 增量重跑，很快到达同一出错点并打印
           # 真实编译错误（默认模式下底层 gcc 报错是被吞掉的）。
           echo "::error::并行编译失败（退出码 $rc），自动降级单线程 V=s 重跑定位真实错误"
-          make -j1 V=s 2>&1 | tee /tmp/build-verbose.log
-          rc2=${PIPESTATUS[0]}
+          run_make_logged /tmp/build-verbose.log -j1 V=s
+          rc2=$?
           echo "第二遍 make 退出码: $rc2"
           echo "---- ccache 状态（编译后）----"
           ccache -s || true
