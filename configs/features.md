@@ -70,6 +70,7 @@
 | dhcp_comment | 0 | 0 | luci-app-dhcp-comment | feed:ybjbox=https://github.com/ybjbox/openwrt-packages.git | 给局域网设备起备注名。**暂缓**：与当前系统兼容性未验证，先不装 |
 | clash_cleaner | 0 | 0 | sysupgrade-clash-cleaner | feed:ybjbox | 升级后清理 Clash 残留。**暂缓**：同上，兼容性未验证 |
 | cf_ipcheck | 1 | 0 | luci-app-cf-ipcheck | feed:ybjbox | Cloudflare 优选 IP 实测 |
+| auroranav | 1 | 0 | nav-collector | feed:ybjbox | NAV 采集器：本机指标/OpenClash 状态/NAS 回采，出站推送 https://nav.403333.xyz。依赖 packages feed 的 golang，首次编译多几分钟 |
 
 ## 基础工具：按需关
 
