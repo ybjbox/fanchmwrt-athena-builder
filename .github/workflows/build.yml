@@ -399,7 +399,7 @@ jobs:
             kill -TERM "$tpid" 2>/dev/null; wait "$tpid" 2>/dev/null
             return "$rc"
           }
-          run_make_logged /tmp/preflight-nav.log -j"$(nproc)" package/feeds/ybjbox/nav-collector/compile
+          run_make_logged /tmp/preflight-nav.log -j"$(nproc)" package/feeds/ybjbox/nav-collector/compile V=s
           rc=$?
           echo "nav-collector 预编退出码: $rc"
           if [ "$rc" -ne 0 ]; then
