@@ -399,6 +399,14 @@ jobs:
             kill -TERM "$tpid" 2>/dev/null; wait "$tpid" 2>/dev/null
             return "$rc"
           }
+          # 冷启动（缓存未命中）时 host 工具链还没建好，单包编译会因为缺
+          # staging_dir/host/bin/openssl、libdeflate-gzip 等 host 工具而失败
+          # （2026-11-23 run 45048473165 实测：ERROR: package/utils/lua [host]
+          # failed to build）。预编只是加速器，不该在环境未就绪时拦下整轮构建。
+          if [ ! -x staging_dir/host/bin/openssl ]; then
+            echo "::warning::host 工具链未就绪（缓存未命中/冷启动），跳过预编，交由 world 编译"
+            exit 0
+          fi
           run_make_logged /tmp/preflight-nav.log -j"$(nproc)" package/feeds/ybjbox/nav-collector/compile V=s
           rc=$?
           echo "nav-collector 预编退出码: $rc"
