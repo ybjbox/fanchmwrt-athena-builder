@@ -315,6 +315,17 @@ if [ "${ATHENA_LUCI_TITLE_HOSTNAME:-1}" = "1" ] && [ -f "$LUCI_HEADER" ]; then
   fi
 fi
 
+# ── 12. rpcd 执行超时 30s → 180s ──
+# LuCI 的「刷写固件」通过 fs.exec 交给 rpcd 执行 /sbin/sysupgrade，rpcd 默认
+# 30 秒就杀掉子进程。而保留配置升级时，/etc/openclash 下百兆级数据打成备份
+# 需要 30 秒以上（实测 167MB → 46.7MB 用了 34 秒），备份刚生成、还没交给
+# procd 就被杀，表现为「网页点了升级但设备不重启，界面一直转圈」。
+# SSH 手动执行 sysupgrade 不受 rpcd 管，所以只有网页这条路会失败。
+# 180 秒对当前数据量留了 5 倍余量。
+uci set rpcd.@rpcd[0].timeout='180' 2>/dev/null
+uci commit rpcd 2>/dev/null || true
+log "rpcd 执行超时已放宽到 180 秒（大备份网页升级需要）"
+
 uci commit network
 uci commit dhcp
 uci commit system

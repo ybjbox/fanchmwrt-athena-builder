@@ -575,6 +575,13 @@ fi
 # 即使标记没写进去，配置本身仍应照常应用
 expect_eq "配置仍然被应用" "Athena_2G" "$(get_db "$WORK/t23/uci" wireless.@wifi-iface0.ssid)"
 
+echo "== t24 rpcd 执行超时放宽到 180 秒 =="
+if grep -q "rpcd.@rpcd\[0\].timeout='180'" "$SCRIPT"; then
+  ok "rpcd 超时设为 180 秒（网页升级大备份不会被 30s 杀掉）"
+else
+  bad "rpcd 超时未设置" "网页升级 46MB 级备份会被 rpcd 默认 30 秒超时杀掉"
+fi
+
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
