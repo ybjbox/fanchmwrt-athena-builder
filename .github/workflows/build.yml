@@ -372,6 +372,45 @@ jobs:
           restore-keys: |
             dl-${{ env.SOURCE_REF }}-
 
+      # 活跃开发的包先单独编一遍。原因：make world 出错后不会立刻退出，
+      # 要等所有在跑的并行任务收尾（2026-11-22 实测：包错误 07:28 出现，
+      # make 到 08:43 才打印退出码，白等 74 分钟）。单包预编几分钟内就能
+      # 暴露问题；它顺带编好的 golang host 与工具链会被后面的 world 复用
+      # （stamp 已在 build_dir 里），正常构建的总耗时基本不变。
+      - name: 预编 nav-collector（快速失败）
+        working-directory: openwrt
+        timeout-minutes: 40
+        run: |
+          if ! grep -q '^CONFIG_PACKAGE_nav-collector=y' .config; then
+            echo "nav-collector 未启用，跳过预编"
+            exit 0
+          fi
+          set +e
+          # 与「编译」步骤同一套可取消写法：make 写文件 + tail -f 回显 + trap 杀进程树
+          run_make_logged() {   # $1=日志文件，其余参数原样传给 make
+            local log="$1"; shift
+            : > "$log"
+            make "$@" > "$log" 2>&1 &
+            local mpid=$!
+            tail -n +1 -f "$log" &
+            local tpid=$!
+            trap 'kill -TERM "$mpid" "$tpid" 2>/dev/null; pkill -TERM -P "$mpid" 2>/dev/null; exit 130' INT TERM
+            wait "$mpid"; local rc=$?
+            kill -TERM "$tpid" 2>/dev/null; wait "$tpid" 2>/dev/null
+            return "$rc"
+          }
+          run_make_logged /tmp/preflight-nav.log -j"$(nproc)" package/feeds/ybjbox/nav-collector/compile
+          rc=$?
+          echo "nav-collector 预编退出码: $rc"
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo '==== nav-collector 单包预编（最后 200 行）===='
+              tail -n 200 /tmp/preflight-nav.log || true
+            } > "$GITHUB_WORKSPACE/build-log-tail.txt"
+            echo "::error::nav-collector 单包预编失败（退出码 $rc），已跳过整轮 world 编译"
+            exit "$rc"
+          fi
+
       - name: 编译（实时显示进度）
         working-directory: openwrt
         timeout-minutes: 240
