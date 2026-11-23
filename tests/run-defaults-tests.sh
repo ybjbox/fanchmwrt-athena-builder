@@ -582,6 +582,28 @@ else
   bad "rpcd 超时未设置" "网页升级 46MB 级备份会被 rpcd 默认 30 秒超时杀掉"
 fi
 
+echo "== t25 关 IPv6 必须显式 set disabled，不能 delete =="
+if grep -q "uci set dhcp.lan.ra='disabled'" "$SCRIPT" && \
+   grep -q "uci set dhcp.lan.dhcpv6='disabled'" "$SCRIPT" && \
+   grep -q "uci set dhcp.lan.ndp='disabled'" "$SCRIPT"; then
+  ok "RA / DHCPv6 / NDP 均显式设为 disabled"
+else
+  bad "IPv6 未显式禁用" "缺 ra/dhcpv6/ndp 的 disabled 设置"
+fi
+# delete 只是删本地覆盖值，uci 会回落到编译默认（ra/dhcpv6 默认 server），
+# 效果与禁用相反。2026-11-23 实机就是因为这两行导致 IPv6 一直没关掉。
+if grep -qE "delete dhcp\.lan\.ra( |$)" "$SCRIPT" || \
+   grep -qE "delete dhcp\.lan\.dhcpv6( |$)" "$SCRIPT"; then
+  bad "误用 delete 删 ra/dhcpv6" "删除会回落默认 server，等于开启"
+else
+  ok "没有误用 delete 删 ra/dhcpv6"
+fi
+if grep -q "delete network.globals.ula_prefix" "$SCRIPT"; then
+  ok "清除 ULA 前缀（否则 LAN 仍挂 fdxx::1）"
+else
+  bad "未清 ULA 前缀" "LAN 仍会有 fdxx::1 并可能通告给客户端"
+fi
+
 echo
 printf '结果: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

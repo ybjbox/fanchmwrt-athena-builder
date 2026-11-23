@@ -110,13 +110,24 @@ if valid "$PPPOE_USER" && valid "$PPPOE_PASS"; then
 fi
 
 # ── 3. 关闭 IPv6 ──
+# 三层都要关，缺一层客户端仍可能拿到地址：
+#   network 层：接口不配 IPv6、WAN 不请求前缀
+#   dhcp 层：不发 RA、不做 DHCPv6、不做 NDP 代理
+#   全局：清掉 ULA 前缀，否则 LAN 仍会挂一个 fdxx::1 并通告出去
+#
+# 注意：这里必须用 set 显式写 disabled，不能用 delete。
+# delete 只是删掉本地覆盖值，uci 会回落到编译默认（ra/dhcpv6 默认都是
+# server），效果与禁用相反 —— 2026-11-23 在实机上就是这么发现没关掉的。
 uci set network.wan6.disabled='1'
 uci set network.lan.delegate='0'
 uci set network.lan.ipv6='0'
 uci set network.wan.ipv6='0'
+uci set dhcp.lan.ra='disabled'
 uci set dhcp.lan.dhcpv6='disabled'
-uci -q delete dhcp.lan.ra 2>/dev/null || true
-uci -q delete dhcp.lan.dhcpv6 2>/dev/null || true
+uci set dhcp.lan.ndp='disabled'
+uci set dhcp.lan.ra_slaac='0'
+uci -q delete dhcp.lan.ra_flags 2>/dev/null || true
+uci -q delete network.globals.ula_prefix 2>/dev/null || true
 /etc/init.d/odhcpd disable 2>/dev/null || true
 
 # ── 4. 无线：2.4G 独立 SSID，双 5G 同名实现漫游 ──
