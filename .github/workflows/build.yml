@@ -16,6 +16,11 @@ on:
         description: '构建完成后创建 Release'
         type: boolean
         default: false
+      preflight:
+        description: '预编指定的包（逗号分隔，如 nav-collector；支持 feeds/ybjbox/xxx 写法；空=不预编）'
+        type: string
+        required: false
+        default: ''
   push:
     tags:
       - 'v*'
@@ -371,6 +376,78 @@ jobs:
           key: dl-${{ env.SOURCE_REF }}-${{ steps.cfgfp.outputs.hash }}
           restore-keys: |
             dl-${{ env.SOURCE_REF }}-
+
+      # 活跃开发的包可以在 world 之前单独编一遍：make world 出错后要等并行任务
+      # 收尾才退出（2026-11-22 实测白等 74 分钟），单包预编几分钟就能暴露问题。
+      # 只有 workflow_dispatch 传了 preflight 才执行，定时/推送触发一律跳过。
+      - name: 预编指定包（快速失败）
+        if: inputs.preflight != ''
+        working-directory: openwrt
+        timeout-minutes: 40
+        env:
+          PREFLIGHT: ${{ inputs.preflight }}
+        run: |
+          # 冷启动（缓存未命中）时 host 工具链还没建好，单包编译会因为缺
+          # staging_dir/host/bin/openssl、libdeflate-gzip 等失败。预编只是加速器，
+          # 环境未就绪时跳过，交给 world 自己处理。
+          if [ ! -x staging_dir/host/bin/openssl ]; then
+            echo "::warning::host 工具链未就绪（缓存未命中/冷启动），跳过预编"
+            exit 0
+          fi
+          set +e
+          # 与「编译」步骤同一套可取消写法：make 写文件 + tail -f 回显 + trap 杀进程树
+          run_make_logged() {
+            local log="$1"; shift
+            : > "$log"
+            make "$@" > "$log" 2>&1 &
+            local mpid=$!
+            tail -n +1 -f "$log" &
+            local tpid=$!
+            trap 'kill -TERM "$mpid" "$tpid" 2>/dev/null; pkill -TERM -P "$mpid" 2>/dev/null; exit 130' INT TERM
+            wait "$mpid"; local rc=$?
+            kill -TERM "$tpid" 2>/dev/null; wait "$tpid" 2>/dev/null
+            return "$rc"
+          }
+          # 解析包目录，四种写法都接：
+          #   nav-collector               → package/feeds/*/nav-collector（找不到再试 package/nav-collector）
+          #   ybjbox/nav-collector        → package/feeds/ybjbox/nav-collector
+          #   feeds/ybjbox/nav-collector  → package/feeds/ybjbox/nav-collector
+          #   package/xxx                 → 原样
+          resolve_pkg() {
+            case "$1" in
+              package/*) echo "$1" ;;
+              feeds/*)   echo "package/$1" ;;
+              */*)       echo "package/feeds/$1" ;;
+              *)
+                local hit
+                hit="$(ls -d package/feeds/*/"$1" 2>/dev/null | head -1)"
+                echo "${hit:-package/$1}"
+                ;;
+            esac
+          }
+          fail=0
+          for pkg in $(printf '%s' "$PREFLIGHT" | tr ',' ' '); do
+            [ -n "$pkg" ] || continue
+            dir="$(resolve_pkg "$pkg")"
+            if [ ! -d "$dir" ]; then
+              echo "::warning::找不到包目录 $dir（$pkg），跳过"
+              continue
+            fi
+            log="/tmp/preflight-$(basename "$pkg").log"
+            echo "==== 预编 $pkg → $dir ===="
+            run_make_logged "$log" -j"$(nproc)" "$dir/compile" V=s
+            rc=$?
+            echo "==== $pkg 预编退出码: $rc ===="
+            if [ "$rc" -ne 0 ]; then
+              {
+                echo "==== 预编失败: $pkg ($dir) 退出码 $rc ===="
+                tail -n 200 "$log" || true
+              } >> "$GITHUB_WORKSPACE/build-log-tail.txt"
+              echo "::error::预编 $pkg 失败（退出码 $rc），已跳过整轮 world 编译"
+              fail=$rc
+            fi
+          done
+          [ "$fail" -eq 0 ] || exit "$fail"
 
       - name: 编译（实时显示进度）
         working-directory: openwrt
