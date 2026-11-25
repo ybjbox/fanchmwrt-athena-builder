@@ -22,7 +22,7 @@
 
 当前的开关状态对齐旧仓库：九个可选插件里启用 7 个，`bandix` 与 `theme_aurora` 关闭——前者与系统自带的流量统计重复，后者只是换个外观没有实际收益。要再减，把某一行的 `启用` 改回 `0` 即可。
 
-`dhcp_comment` 与 `clash_cleaner` 目前也是 `0`：这两个包来自自建源 `ybjbox/openwrt-packages`，与当前系统（FanchmWrt 26.11 / apk）的兼容性还没实测过，先不装进固件，等验证过再单独打开。注意：`ybjbox` 软件源的网址登记在 `dhcp_comment` 这一行的来源列里，**行可以关、不要删**，`cf_ipcheck` 还靠它引用（关掉的行仍会解析来源列，登记不会丢）。
+`ybjbox` 软件源（`ybjbox/openwrt-packages`）的网址登记在 `cf_ipcheck` 这一行的来源列里，`auroranav` 也引用它，**改行不要删这一列**。原来的 `dhcp_comment` 与 `clash_cleaner` 两行已随包一起从源仓库删除（2026-11-25），不再保留占位。
 
 ## 列的含义
 
@@ -67,9 +67,7 @@
 |---|---|---|---|---|---|
 | athena_target | 1 | 0 | | | 占位行：设备型号写死在流水线里，这行只是提醒别删 |
 | athena_led | 1 | 0 | luci-app-athena-led luci-i18n-athena-led-zh-cn | git:https://github.com/NONGFAH/luci-app-athena-led | 点阵屏小屏驱动（普通直选，随固件安装） |
-| dhcp_comment | 0 | 0 | luci-app-dhcp-comment | feed:ybjbox=https://github.com/ybjbox/openwrt-packages.git | 给局域网设备起备注名。**暂缓**：与当前系统兼容性未验证，先不装 |
-| clash_cleaner | 0 | 0 | sysupgrade-clash-cleaner | feed:ybjbox | 升级后清理 Clash 残留。**暂缓**：同上，兼容性未验证 |
-| cf_ipcheck | 1 | 0 | luci-app-cf-ipcheck | feed:ybjbox | Cloudflare 优选 IP 实测 |
+| cf_ipcheck | 1 | 0 | luci-app-cf-ipcheck | feed:ybjbox=https://github.com/ybjbox/openwrt-packages.git | Cloudflare 优选 IP 实测 |
 | auroranav | 1 | 0 | nav-collector | feed:ybjbox | NAV 采集器：本机指标/OpenClash 状态/NAS 回采，出站推送 https://nav.403333.xyz。依赖 packages feed 的 golang，首次编译多几分钟 |
 
 ## 基础工具：按需关

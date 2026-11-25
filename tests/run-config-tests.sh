@@ -92,8 +92,8 @@ else
   printf '  FAIL  缺少基线文件 %s（运行 tests/update-golden.sh 生成）\n' "$GOLDEN"; FAIL=$((FAIL+1))
 fi
 
-# ybjbox 软件源的网址现在登记在 dhcp_comment 行，被 dhcp_comment / clash_cleaner /
-# cf_ipcheck 三行引用。网址一旦被删，gen-config.sh 会在完整性检查里 die，这里守住。
+# ybjbox 软件源的网址现在登记在 cf_ipcheck 行，被 cf_ipcheck / auroranav 两行引用。
+# 网址一旦被删，gen-config.sh 会在完整性检查里 die，这里守住。
 run "$GEN" --features "$FEATURES" --list-feeds
 expect_code "列软件源成功" 0
 expect_has "ybjbox 网址登记仍在" "ybjbox=https://github.com/ybjbox/openwrt-packages.git"
